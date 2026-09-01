@@ -1,0 +1,29 @@
+# 环境配置（含敏感信息）
+.env
+!.env.example
+
+# 数据目录
+data/
+
+# 构建产物
+backend/target/
+frontend/dist/
+frontend/node_modules/
+
+# 临时文件
+*.tar.gz
+*.tar
+*.log
+.docvenv/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 脚本生成的临时文件
+alter_2026*.sql
