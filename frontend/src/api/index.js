@@ -67,6 +67,7 @@ export const getWeeklyReportPage = (params) => request.get('/weeklyReport/page',
 export const getWeeklyReportDetail = (id) => request.get(`/weeklyReport/${id}`)
 export const getMyLatestReport = () => request.get('/weeklyReport/myLatest')
 export const getCurrentWeek = () => request.get('/weeklyReport/currentWeek')
+export const getWeeklyPersonSummary = (params) => request.get('/weeklyReport/personSummary', { params })
 
 // 阶段任务
 export const addStage = (data) => request.post('/stage/add', data)

@@ -2,12 +2,14 @@ package com.sugon.testplatform.controller;
 
 import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.common.Result;
+import com.sugon.testplatform.dto.WeeklyReportPersonSummary;
 import com.sugon.testplatform.entity.WeeklyReport;
 import com.sugon.testplatform.service.WeeklyReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -53,5 +55,11 @@ public class WeeklyReportController {
         map.put("weekNum", weeklyReportService.currentWeekNum());
         map.put("year", weeklyReportService.currentYear());
         return Result.ok(map);
+    }
+
+    @GetMapping("/personSummary")
+    public Result<List<WeeklyReportPersonSummary>> personSummary(@RequestParam(required = false) Integer year,
+                                                                  @RequestParam(required = false) Integer weekNum) {
+        return Result.ok(weeklyReportService.personSummary(year, weekNum));
     }
 }

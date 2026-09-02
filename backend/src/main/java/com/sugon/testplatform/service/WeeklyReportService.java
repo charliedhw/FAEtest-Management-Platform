@@ -1,6 +1,7 @@
 package com.sugon.testplatform.service;
 
 import com.sugon.testplatform.common.PageResult;
+import com.sugon.testplatform.dto.WeeklyReportPersonSummary;
 import com.sugon.testplatform.entity.WeeklyReport;
 
 import java.util.List;
@@ -15,4 +16,6 @@ public interface WeeklyReportService {
     // 获取当前周数
     int currentWeekNum();
     int currentYear();
+    // 按人员汇总指定周的周报（FAE测试组全部成员，含未提交人员）
+    List<WeeklyReportPersonSummary> personSummary(Integer year, Integer weekNum);
 }

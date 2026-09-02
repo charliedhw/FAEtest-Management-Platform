@@ -31,40 +31,108 @@
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>{{ canSeeAll ? '周报列表（全部）' : '我的周报' }}</span>
+          <div style="display:flex;align-items:center;gap:16px">
+            <span>{{ canSeeAll ? '周报列表（全部）' : '我的周报' }}</span>
+            <el-radio-group v-if="canSeeAll" v-model="viewMode" size="small">
+              <el-radio-button value="report">按周报查看</el-radio-button>
+              <el-radio-button value="person">按人员查看</el-radio-button>
+            </el-radio-group>
+          </div>
           <div style="display:flex;gap:8px;align-items:center">
             <el-input-number v-model="filterYear" :min="2020" :max="2030" placeholder="年份" size="small" style="width:110px" @change="load" />
             <el-input-number v-model="filterWeek" :min="1" :max="53" placeholder="周数" size="small" style="width:100px" @change="load" />
-            <el-input v-if="canSeeAll" v-model="filterAuthor" placeholder="搜索姓名" clearable size="small" style="width:140px" @clear="load" @keyup.enter="load" />
+            <el-input v-if="canSeeAll && viewMode === 'report'" v-model="filterAuthor" placeholder="搜索姓名" clearable size="small" style="width:140px" @clear="load" @keyup.enter="load" />
             <el-button size="small" @click="load">查询</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="list" v-loading="loading" stripe>
-        <el-table-column label="周报名称" prop="title" min-width="220">
-          <template #default="{ row }">
-            <el-link type="primary" @click="viewDetail(row)">{{ row.title }}</el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="作者" prop="authorName" width="100" />
-        <el-table-column label="部门" prop="deptName" width="120" />
-        <el-table-column label="周数" width="80" align="center">
-          <template #default="{ row }">W{{ row.weekNum }}</template>
-        </el-table-column>
-        <el-table-column label="年份" prop="year" width="80" align="center" />
-        <el-table-column label="提交时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
-        </el-table-column>
-        <el-table-column v-if="!canSeeAll" label="操作" width="120" align="center">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openForm(row)">编辑</el-button>
-            <el-popconfirm title="确认删除？" @confirm="handleDelete(row)">
-              <template #reference><el-button link type="danger" size="small">删除</el-button></template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-pagination style="margin-top:16px;justify-content:flex-end" background layout="total, prev, pager, next" :total="total" :page-size="pageSize" :current-page="pageNum" @current-change="(p) => { pageNum = p; load() }" />
+
+      <!-- 按周报查看 -->
+      <template v-if="viewMode === 'report'">
+        <el-table :data="list" v-loading="loading" stripe>
+          <el-table-column label="周报名称" prop="title" min-width="220">
+            <template #default="{ row }">
+              <el-link type="primary" @click="viewDetail(row)">{{ row.title }}</el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="作者" prop="authorName" width="100" />
+          <el-table-column label="部门" prop="deptName" width="120" />
+          <el-table-column label="周数" width="80" align="center">
+            <template #default="{ row }">W{{ row.weekNum }}</template>
+          </el-table-column>
+          <el-table-column label="年份" prop="year" width="80" align="center" />
+          <el-table-column label="提交时间" width="160">
+            <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+          </el-table-column>
+          <el-table-column v-if="!canSeeAll" label="操作" width="120" align="center">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="openForm(row)">编辑</el-button>
+              <el-popconfirm title="确认删除？" @confirm="handleDelete(row)">
+                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              </el-popconfirm>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-pagination style="margin-top:16px;justify-content:flex-end" background layout="total, prev, pager, next" :total="total" :page-size="pageSize" :current-page="pageNum" @current-change="(p) => { pageNum = p; load() }" />
+      </template>
+
+      <!-- 按人员查看 -->
+      <template v-else>
+        <el-table :data="personList" v-loading="loading" stripe row-key="userId" @expand-change="(row) => loadPersonDetail(row)">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div v-if="row.submitted" style="padding:8px 24px">
+                <el-card shadow="never" style="margin-bottom:12px">
+                  <template #header><span style="font-weight:600;color:#409eff">本周测试进展</span></template>
+                  <div style="white-space:pre-wrap;line-height:1.8">{{ row.progressFull }}</div>
+                </el-card>
+                <el-card v-if="row.hasProblems" shadow="never" style="margin-bottom:12px">
+                  <template #header><span style="font-weight:600;color:#e6a23c">存在问题</span></template>
+                  <div style="white-space:pre-wrap;line-height:1.8">{{ row.problemFull }}</div>
+                </el-card>
+                <el-card shadow="never">
+                  <template #header><span style="font-weight:600;color:#67c23a">下周工作计划</span></template>
+                  <div style="white-space:pre-wrap;line-height:1.8">{{ row.nextPlanFull }}</div>
+                </el-card>
+              </div>
+              <div v-else style="padding:8px 24px;color:#999">该工程师本周尚未提交周报</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="姓名" prop="realName" width="120" />
+          <el-table-column label="本周状态" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.submitted" type="success" size="small">已提交</el-tag>
+              <el-tag v-else type="danger" size="small">未提交</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="周报" min-width="200">
+            <template #default="{ row }">
+                <span v-if="row.submitted">{{ row.title }}</span>
+              <span v-else style="color:#c0c4cc">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="存在问题" width="90" align="center">
+            <template #default="{ row }">
+              <el-icon v-if="row.submitted && row.hasProblems" color="#e6a23c" :size="18" title="存在问题"><WarningFilled /></el-icon>
+              <span v-else style="color:#c0c4cc">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="本周进展摘要" min-width="260">
+            <template #default="{ row }">
+              <span style="color:#606266">{{ row.progressSummary || '—' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="累计周报" width="90" align="center">
+            <template #default="{ row }">{{ row.reportCount }}</template>
+          </el-table-column>
+          <el-table-column label="提交时间" width="160">
+            <template #default="{ row }">{{ row.submitTime ? formatDateTime(row.submitTime) : '—' }}</template>
+          </el-table-column>
+        </el-table>
+        <div style="margin-top:12px;font-size:12px;color:#909399">
+          共 {{ personList.length }} 名FAE工程师，已提交 {{ personList.filter(p => p.submitted).length }} 人，未提交 {{ personList.filter(p => !p.submitted).length }} 人
+        </div>
+      </template>
     </el-card>
 
     <!-- 写周报对话框 -->
@@ -130,8 +198,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import { saveWeeklyReport, deleteWeeklyReport, getWeeklyReportPage, getMyLatestReport, getCurrentWeek } from '../../api'
+import { Plus, WarningFilled } from '@element-plus/icons-vue'
+import { saveWeeklyReport, deleteWeeklyReport, getWeeklyReportPage, getMyLatestReport, getCurrentWeek, getWeeklyPersonSummary, getWeeklyReportDetail } from '../../api'
 import { formatDateTime } from '../../utils/format'
 import { useUserStore } from '../../store/user'
 
@@ -147,6 +215,9 @@ const filterAuthor = ref('')
 const myLatest = ref(null)
 const currentWeek = ref(0)
 const currentYear = ref(0)
+// 视图模式：report=按周报，person=按人员
+const viewMode = ref('report')
+const personList = ref([])
 
 // FAE测试组及以上角色可写周报
 const canWrite = computed(() =>
@@ -167,6 +238,10 @@ const detailVisible = ref(false)
 const detailData = ref({})
 
 const load = async () => {
+  if (viewMode.value === 'person' && canSeeAll.value) {
+    await loadPersonSummary()
+    return
+  }
   loading.value = true
   try {
     const params = { pageNum: pageNum.value, pageSize: pageSize.value }
@@ -181,6 +256,29 @@ const load = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadPersonSummary = async () => {
+  loading.value = true
+  try {
+    const params = {}
+    if (filterYear.value) params.year = filterYear.value
+    if (filterWeek.value) params.weekNum = filterWeek.value
+    const res = await getWeeklyPersonSummary(params)
+    personList.value = res.data || []
+  } finally {
+    loading.value = false
+  }
+}
+
+// 展开行时加载完整周报内容（摘要只含前200字）
+const loadPersonDetail = async (row) => {
+  if (!row.reportId || row.detailLoaded) return
+  const res = await getWeeklyReportDetail(row.reportId)
+  row.progressFull = res.data.thisWeekProgress
+  row.problemFull = res.data.problems
+  row.nextPlanFull = res.data.nextWeekPlan
+  row.detailLoaded = true
 }
 
 const loadMyLatest = async () => {
