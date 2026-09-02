@@ -22,8 +22,9 @@ public class UserController {
     @GetMapping("/page")
     public Result<PageResult<SysUser>> page(@RequestParam(defaultValue = "1") int pageNum,
                                             @RequestParam(defaultValue = "10") int pageSize,
-                                            @RequestParam(required = false) String keyword) {
-        return Result.ok(userService.page(pageNum, pageSize, keyword));
+                                            @RequestParam(required = false) String keyword,
+                                            @RequestParam(required = false) Long groupId) {
+        return Result.ok(userService.page(pageNum, pageSize, keyword, groupId));
     }
 
     @PostMapping("/save")

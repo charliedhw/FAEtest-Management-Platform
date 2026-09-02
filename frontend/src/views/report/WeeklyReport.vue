@@ -33,7 +33,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="display:flex;align-items:center;gap:16px">
             <span>{{ canSeeAll ? '周报列表（全部）' : '我的周报' }}</span>
-            <el-radio-group v-if="canSeeAll" v-model="viewMode" size="small">
+            <el-radio-group v-if="canSeeAll" v-model="viewMode" size="small" @change="load">
               <el-radio-button value="report">按周报查看</el-radio-button>
               <el-radio-button value="person">按人员查看</el-radio-button>
             </el-radio-group>
@@ -346,6 +346,7 @@ const viewDetail = (row) => {
 onMounted(async () => {
   await loadCurrentWeek()
   filterYear.value = currentYear.value
+  filterWeek.value = currentWeek.value
   load()
   loadMyLatest()
 })

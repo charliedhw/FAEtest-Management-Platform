@@ -13,6 +13,8 @@ public interface UserService {
     LoginResponse login(LoginRequest req);
     List<String> getRoleCodes(Long userId);
     PageResult<SysUser> page(int pageNum, int pageSize, String keyword);
+    // 分页查询（可按用户组筛选成员）
+    PageResult<SysUser> page(int pageNum, int pageSize, String keyword, Long groupId);
     void save(UserSaveRequest req);
     void deleteUser(Long userId);
     // 批量删除用户，返回删除数量（跳过admin和当前登录人）

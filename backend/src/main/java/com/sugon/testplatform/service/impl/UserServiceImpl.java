@@ -95,13 +95,27 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResult<SysUser> page(int pageNum, int pageSize, String keyword) {
-        Page<SysUser> page = new Page<>(pageNum, pageSize);
+        return page(pageNum, pageSize, keyword, null);
+    }
+
+    @Override
+    public PageResult<SysUser> page(int pageNum, int pageSize, String keyword, Long groupId) {
         LambdaQueryWrapper<SysUser> qw = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             qw.like(SysUser::getUsername, keyword).or().like(SysUser::getRealName, keyword);
         }
+        // 按用户组筛选成员
+        if (groupId != null) {
+            List<SysUserGroupRel> rels = userGroupRelMapper.selectList(
+                    new LambdaQueryWrapper<SysUserGroupRel>().eq(SysUserGroupRel::getGroupId, groupId));
+            if (rels.isEmpty()) {
+                return new PageResult<>(0L, new ArrayList<>());
+            }
+            List<Long> memberIds = rels.stream().map(SysUserGroupRel::getUserId).collect(Collectors.toList());
+            qw.in(SysUser::getId, memberIds);
+        }
         qw.orderByDesc(SysUser::getCreateTime);
-        Page<SysUser> result = userMapper.selectPage(page, qw);
+        Page<SysUser> result = userMapper.selectPage(new Page<>(pageNum, pageSize), qw);
         result.getRecords().forEach(u -> u.setPassword(null));
         return new PageResult<>(result.getTotal(), result.getRecords());
     }

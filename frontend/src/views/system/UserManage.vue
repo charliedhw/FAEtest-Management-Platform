@@ -2,7 +2,10 @@
   <div>
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input v-model="query.keyword" placeholder="用户名/姓名" style="width:200px" clearable @keyup.enter="load" @clear="load" />
+        <el-input v-model="query.keyword" placeholder="用户名/姓名" style="width:180px" clearable @keyup.enter="load" @clear="load" />
+        <el-select v-model="query.groupId" placeholder="按分组筛选" clearable style="width:160px" @change="load">
+          <el-option v-for="g in groupList" :key="g.id" :label="g.groupName" :value="g.id" />
+        </el-select>
         <el-button type="primary" @click="load">查询</el-button>
         <template v-if="selectedUsers.length > 0">
           <el-divider direction="vertical" />
@@ -36,7 +39,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination style="margin-top:16px;justify-content:flex-end" background layout="total,prev,pager,next" :total="total" :page-size="query.pageSize" :current-page="query.pageNum" @current-change="(p) => { query.pageNum = p; load() }" />
+      <el-pagination style="margin-top:16px;justify-content:flex-end" background layout="total,sizes,prev,pager,next" :total="total" :page-sizes="[10,20,50]" v-model:page-size="query.pageSize" :current-page="query.pageNum" @size-change="(s) => { query.pageSize = s; query.pageNum = 1; load() }" @current-change="(p) => { query.pageNum = p; load() }" />
     </el-card>
 
     <el-dialog v-model="formVisible" :title="form.id ? '编辑用户' : '新增用户'" width="500px">
@@ -105,7 +108,7 @@ const loading = ref(false)
 const list = ref([])
 const total = ref(0)
 const roles = ref([])
-const query = ref({ pageNum: 1, pageSize: 10, keyword: '' })
+const query = ref({ pageNum: 1, pageSize: 10, keyword: '', groupId: null })
 const formVisible = ref(false)
 const importResultVisible = ref(false)
 const importResult = ref({})
@@ -120,7 +123,9 @@ const groupSaving = ref(false)
 const load = async () => {
   loading.value = true
   try {
-    const res = await getUserPage(query.value)
+    const params = { pageNum: query.value.pageNum, pageSize: query.value.pageSize, keyword: query.value.keyword }
+    if (query.value.groupId) params.groupId = query.value.groupId
+    const res = await getUserPage(params)
     list.value = res.data.records
     total.value = res.data.total
   } finally { loading.value = false }
@@ -205,7 +210,12 @@ const handleImport = async ({ file }) => {
   }
 }
 
-onMounted(() => { load(); loadRoles() })
+const loadGroups = async () => {
+  const res = await getGroupList()
+  groupList.value = res.data || []
+}
+
+onMounted(() => { load(); loadRoles(); loadGroups() })
 </script>
 
 <style scoped>
