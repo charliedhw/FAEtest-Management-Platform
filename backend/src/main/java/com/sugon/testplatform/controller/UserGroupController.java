@@ -66,6 +66,28 @@ public class UserGroupController {
     }
 
     /**
+     * 批量添加成员到组（不移除已有成员，自动去重），返回实际新增数量
+     */
+    @PostMapping("/addMembers/{groupId}")
+    @Transactional
+    public Result<Integer> addMembers(@PathVariable Long groupId, @RequestBody List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Result.ok(0);
+        List<Long> existing = relMapper.selectList(
+                new LambdaQueryWrapper<SysUserGroupRel>().eq(SysUserGroupRel::getGroupId, groupId))
+                .stream().map(SysUserGroupRel::getUserId).collect(Collectors.toList());
+        int count = 0;
+        for (Long uid : userIds) {
+            if (existing.contains(uid)) continue;
+            SysUserGroupRel rel = new SysUserGroupRel();
+            rel.setGroupId(groupId);
+            rel.setUserId(uid);
+            relMapper.insert(rel);
+            count++;
+        }
+        return Result.ok(count);
+    }
+
+    /**
      * 获取组成员
      */
     @GetMapping("/members/{groupId}")

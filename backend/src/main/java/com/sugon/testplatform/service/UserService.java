@@ -15,6 +15,10 @@ public interface UserService {
     PageResult<SysUser> page(int pageNum, int pageSize, String keyword);
     void save(UserSaveRequest req);
     void deleteUser(Long userId);
+    // 批量删除用户，返回删除数量（跳过admin和当前登录人）
+    int batchDelete(List<Long> userIds);
+    // 批量重置密码为默认密码，返回重置数量
+    int batchResetPassword(List<Long> userIds);
     java.util.Map<String, Object> importUsers(org.springframework.web.multipart.MultipartFile file);
     void changePassword(Long userId, String oldPwd, String newPwd);
     void resetPassword(Long userId);

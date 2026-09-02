@@ -19,6 +19,7 @@ import com.sugon.testplatform.mapper.SysUserGroupRelMapper;
 import com.sugon.testplatform.mapper.SysUserMapper;
 import com.sugon.testplatform.mapper.SysUserRoleMapper;
 import com.sugon.testplatform.security.JwtUtil;
+import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Row;
@@ -179,6 +180,41 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(DEFAULT_PWD));
         user.setIsFirstLogin(1);
         userMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional
+    public int batchDelete(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return 0;
+        Long currentUserId = UserContext.getUserId();
+        int count = 0;
+        for (Long userId : userIds) {
+            SysUser user = userMapper.selectById(userId);
+            if (user == null) continue;
+            if ("admin".equals(user.getUsername())) continue;
+            if (userId.equals(currentUserId)) continue;
+            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+            userMapper.deleteById(userId);
+            count++;
+        }
+        return count;
+    }
+
+    @Override
+    @Transactional
+    public int batchResetPassword(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return 0;
+        String encoded = passwordEncoder.encode(DEFAULT_PWD);
+        int count = 0;
+        for (Long userId : userIds) {
+            SysUser user = userMapper.selectById(userId);
+            if (user == null) continue;
+            user.setPassword(encoded);
+            user.setIsFirstLogin(1);
+            userMapper.updateById(user);
+            count++;
+        }
+        return count;
     }
 
     @Override

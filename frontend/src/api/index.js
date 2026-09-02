@@ -12,6 +12,8 @@ export const listUserByRole = (roleCode) => request.get('/user/listByRole', { pa
 export const listAllUser = () => request.get('/user/listAll')
 export const getUserInfo = () => request.get('/user/info')
 export const deleteUser = (userId) => request.delete(`/user/${userId}`)
+export const batchDeleteUsers = (userIds) => request.post('/user/batchDelete', userIds)
+export const batchResetPassword = (userIds) => request.post('/user/batchResetPassword', userIds)
 export const importUsers = (file) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -26,6 +28,7 @@ export const saveGroup = (data) => request.post('/group/save', data)
 export const deleteGroup = (id) => request.delete(`/group/${id}`)
 export const getGroupMembers = (groupId) => request.get(`/group/members/${groupId}`)
 export const setGroupMembers = (groupId, userIds) => request.post(`/group/members/${groupId}`, userIds)
+export const addGroupMembers = (groupId, userIds) => request.post(`/group/addMembers/${groupId}`, userIds)
 export const setGroupLeader = (data) => request.post('/group/leader', data)
 
 // 申请

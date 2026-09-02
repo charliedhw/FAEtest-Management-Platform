@@ -51,6 +51,22 @@ public class UserController {
     }
 
     /**
+     * 批量删除用户（跳过admin和当前登录人）
+     */
+    @PostMapping("/batchDelete")
+    public Result<Integer> batchDelete(@RequestBody List<Long> userIds) {
+        return Result.ok(userService.batchDelete(userIds));
+    }
+
+    /**
+     * 批量重置密码为默认密码
+     */
+    @PostMapping("/batchResetPassword")
+    public Result<Integer> batchResetPassword(@RequestBody List<Long> userIds) {
+        return Result.ok(userService.batchResetPassword(userIds));
+    }
+
+    /**
      * 导入人员Excel生成账号并归组
      */
     @PostMapping("/import")

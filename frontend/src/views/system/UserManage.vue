@@ -3,13 +3,21 @@
     <el-card shadow="never">
       <div class="toolbar">
         <el-input v-model="query.keyword" placeholder="用户名/姓名" style="width:200px" clearable @keyup.enter="load" @clear="load" />
-        <el-button type="primary" style="margin-left:8px" @click="load">查询</el-button>
+        <el-button type="primary" @click="load">查询</el-button>
+        <template v-if="selectedUsers.length > 0">
+          <el-divider direction="vertical" />
+          <span style="font-size:13px;color:#606266">已选 {{ selectedUsers.length }} 人</span>
+          <el-button type="warning" size="small" @click="handleBatchReset">批量重置密码</el-button>
+          <el-button type="primary" size="small" @click="openGroupSelect">加入分组</el-button>
+          <el-button type="danger" size="small" @click="handleBatchDelete">批量删除</el-button>
+        </template>
         <el-upload :show-file-list="false" :http-request="handleImport" accept=".xlsx,.xls" style="margin-left:auto">
           <el-button type="success"><el-icon><Upload /></el-icon>导入人员</el-button>
         </el-upload>
         <el-button type="primary" @click="openForm()"><el-icon><Plus /></el-icon>新增用户</el-button>
       </div>
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table :data="list" v-loading="loading" stripe @selection-change="(rows) => selectedUsers = rows">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="username" label="用户名" width="120" />
         <el-table-column prop="realName" label="姓名" width="100" />
         <el-table-column prop="email" label="邮箱" min-width="180" />
@@ -69,13 +77,27 @@
         <el-button type="primary" @click="importResultVisible = false">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 加入分组 -->
+    <el-dialog v-model="groupSelectVisible" title="加入分组" width="420px">
+      <div style="margin-bottom:10px;font-size:13px;color:#606266">
+        将选中的 {{ selectedUsers.length }} 人添加到指定分组：
+      </div>
+      <el-select v-model="targetGroupId" placeholder="请选择分组" style="width:100%">
+        <el-option v-for="g in groupList" :key="g.id" :label="g.groupName" :value="g.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="groupSelectVisible = false">取消</el-button>
+        <el-button type="primary" :loading="groupSaving" @click="handleAddToGroup">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUserPage, saveUser, resetPassword, deleteUser, importUsers, getAllRoles, getUserRoleIds } from '../../api'
+import { getUserPage, saveUser, resetPassword, deleteUser, importUsers, getAllRoles, getUserRoleIds, batchDeleteUsers, batchResetPassword, getGroupList, addGroupMembers } from '../../api'
 import { formatDateTime } from '../../utils/format'
 import request from '../../utils/request'
 
@@ -88,6 +110,12 @@ const formVisible = ref(false)
 const importResultVisible = ref(false)
 const importResult = ref({})
 const form = ref({ roleIds: [] })
+// 批量操作
+const selectedUsers = ref([])
+const groupSelectVisible = ref(false)
+const groupList = ref([])
+const targetGroupId = ref(null)
+const groupSaving = ref(false)
 
 const load = async () => {
   loading.value = true
@@ -122,6 +150,46 @@ const handleReset = async (row) => {
 const handleDelete = async (row) => {
   await ElMessageBox.confirm(`确认删除用户【${row.realName}(${row.username})】？此操作不可恢复`, '警告', { type: 'error', confirmButtonText: '删除', cancelButtonText: '取消' })
   await deleteUser(row.id); ElMessage.success('已删除'); load()
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+  const names = selectedUsers.value.map(u => u.realName).join('、')
+  await ElMessageBox.confirm(
+    `确认删除选中的 ${selectedUsers.value.length} 个用户（${names}）？此操作不可恢复，admin账号和当前登录人将自动跳过`,
+    '警告', { type: 'error', confirmButtonText: '删除', cancelButtonText: '取消' })
+  const res = await batchDeleteUsers(selectedUsers.value.map(u => u.id))
+  ElMessage.success(`已删除 ${res.data} 个用户`)
+  load()
+}
+
+// 批量重置密码
+const handleBatchReset = async () => {
+  await ElMessageBox.confirm(
+    `确认将选中的 ${selectedUsers.value.length} 个用户密码重置为默认密码 Sugon@123 ？`,
+    '提示', { type: 'warning' })
+  const res = await batchResetPassword(selectedUsers.value.map(u => u.id))
+  ElMessage.success(`已重置 ${res.data} 个用户密码为 Sugon@123`)
+}
+
+// 加入分组
+const openGroupSelect = async () => {
+  const res = await getGroupList()
+  groupList.value = res.data || []
+  targetGroupId.value = null
+  groupSelectVisible.value = true
+}
+const handleAddToGroup = async () => {
+  if (!targetGroupId.value) { ElMessage.warning('请选择分组'); return }
+  groupSaving.value = true
+  try {
+    const gname = groupList.value.find(g => g.id === targetGroupId.value)?.groupName
+    const res = await addGroupMembers(targetGroupId.value, selectedUsers.value.map(u => u.id))
+    ElMessage.success(`已将 ${res.data} 人加入分组「${gname}」（已在组内的自动跳过）`)
+    groupSelectVisible.value = false
+  } finally {
+    groupSaving.value = false
+  }
 }
 
 // 导入人员
