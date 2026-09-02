@@ -47,7 +47,11 @@
           <el-option v-for="d in dicts.test_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
         </el-select>
       </el-form-item>
-      <el-form-item label="设备类型"><el-input v-model="form.deviceType" placeholder="如:BW1000" /></el-form-item>
+      <el-form-item label="设备类型">
+        <el-select v-model="deviceTypeArr" multiple placeholder="请选择设备类型" style="width:100%" @change="form.deviceType = deviceTypeArr.join(',')">
+          <el-option v-for="d in dicts.device_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="硬件配置"><el-input v-model="form.hardwareConfig" type="textarea" :rows="2" placeholder="CPU/内存/网络/存储等" /></el-form-item>
       <el-form-item label="软件及应用" prop="softwareApp"><el-input v-model="form.softwareApp" type="textarea" :rows="2" placeholder="涉及软件及应用" /></el-form-item>
       <el-form-item label="测试方式" prop="testMethod">
@@ -89,6 +93,7 @@ const route = useRoute()
 const formRef = ref()
 const submitting = ref(false)
 const testTypeArr = ref([])
+const deviceTypeArr = ref([])
 const dicts = ref({})
 const salesList = ref([])
 const presalesList = ref([])
@@ -127,6 +132,7 @@ const onPresalesChange = (id) => {
 const handleSubmit = async () => {
   await formRef.value.validate()
   form.testType = JSON.stringify(testTypeArr.value)
+  form.deviceType = deviceTypeArr.value.join(',')
   // 申请周期与天数合并：用天数填充applyPeriod
   form.applyPeriod = form.applyDays + '天'
   submitting.value = true
@@ -141,6 +147,7 @@ const handleSubmit = async () => {
 
 const handleDraft = async () => {
   form.testType = JSON.stringify(testTypeArr.value)
+  form.deviceType = deviceTypeArr.value.join(',')
   form.applyPeriod = form.applyDays + '天'
   await saveDraft(form)
   ElMessage.success('草稿已保存')
@@ -195,7 +202,10 @@ const applyImportFields = (fields) => {
   if (fields.requirement) form.requirement = fields.requirement
   if (fields.testPlan) form.testPlan = fields.testPlan
   if (fields.hardwareConfig) form.hardwareConfig = fields.hardwareConfig
-  if (fields.deviceType) form.deviceType = fields.deviceType
+  if (fields.deviceType) {
+    form.deviceType = fields.deviceType
+    deviceTypeArr.value = String(fields.deviceType).split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+  }
   if (fields.softwareApp) form.softwareApp = fields.softwareApp
   if (fields.applyDays) form.applyDays = fields.applyDays
   if (fields.expectResourceType) form.expectResourceType = fields.expectResourceType
@@ -227,6 +237,7 @@ onMounted(async () => {
     Object.assign(form, detail.data)
     form.id = null
     try { testTypeArr.value = JSON.parse(detail.data.testType || '[]') } catch { testTypeArr.value = [] }
+    deviceTypeArr.value = String(detail.data.deviceType || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean)
   }
 })
 </script>

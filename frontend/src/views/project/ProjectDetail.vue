@@ -192,16 +192,16 @@
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12"><el-form-item label="中标金额(万)"><el-input-number v-model="editForm.bidAmount" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="设备类型"><el-input v-model="editForm.deviceType" /></el-form-item></el-col>
-        </el-row>
-        <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="测试类型">
-              <el-select v-model="editTestTypeArr" multiple style="width:100%" placeholder="请选择测试类型">
-                <el-option v-for="d in dicts.test_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+            <el-form-item label="设备类型">
+              <el-select v-model="editDeviceTypeArr" multiple style="width:100%" placeholder="请选择设备类型">
+                <el-option v-for="d in dicts.device_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12"><el-form-item label="测试类型"><el-input v-model="editForm.testType" placeholder="如：AI、测试" /></el-form-item></el-col>
           <el-col :span="12">
             <el-form-item label="测试方式">
               <el-select v-model="editForm.testMethod" style="width:100%" clearable placeholder="请选择">
@@ -268,7 +268,7 @@ const progressForm = ref({ projectId, progressDate: null, content: '' })
 const editVisible = ref(false)
 const saving = ref(false)
 const editForm = ref({})
-const editTestTypeArr = ref([])
+const editDeviceTypeArr = ref([])
 // 阶段任务
 const stageList = ref([])
 const progressData = ref({ total: 0, done: 0, inProgress: 0, notStart: 0, percent: 0 })
@@ -347,7 +347,7 @@ const changeStatus = async (status) => {
 // 打开编辑对话框,回填当前数据
 const openEdit = () => {
   editForm.value = { ...project.value }
-  try { editTestTypeArr.value = JSON.parse(project.value.testType || '[]') } catch { editTestTypeArr.value = [] }
+  editDeviceTypeArr.value = String(project.value.deviceType || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean)
   editVisible.value = true
 }
 
@@ -355,7 +355,7 @@ const openEdit = () => {
 const handleSaveEdit = async () => {
   saving.value = true
   try {
-    editForm.value.testType = JSON.stringify(editTestTypeArr.value)
+    editForm.value.deviceType = editDeviceTypeArr.value.join(',')
     await updateProject(editForm.value)
     ElMessage.success('项目信息已保存')
     editVisible.value = false
