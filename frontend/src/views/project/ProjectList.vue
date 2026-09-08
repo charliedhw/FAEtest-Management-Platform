@@ -26,6 +26,13 @@
             <el-option label="31-90天" value="31-90" />
             <el-option label="90天以上" value="GT90" />
           </el-select>
+          <el-select v-model="query.bidStatus" placeholder="招标状态" clearable style="width:110px" @change="load">
+            <el-option v-for="d in dicts.bid_status" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+          </el-select>
+          <el-select v-model="query.isKeyProject" placeholder="重点项目" clearable style="width:110px" @change="load">
+            <el-option label="重点项目" :value="1" />
+            <el-option label="非重点项目" :value="0" />
+          </el-select>
           <el-date-picker v-model="query.testStartFrom" type="date" placeholder="测试开始时间" value-format="YYYY-MM-DD" style="width:150px" @change="load" />
           <span style="color:#999">至</span>
           <el-date-picker v-model="query.testStartTo" type="date" placeholder="测试结束时间" value-format="YYYY-MM-DD" style="width:150px" @change="load" />
@@ -91,7 +98,7 @@ import { formatDateTime, formatTestType } from '../../utils/format'
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-const query = ref({ pageNum: 1, pageSize: 10, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '' })
+const query = ref({ pageNum: 1, pageSize: 10, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '', bidStatus: '', isKeyProject: '' })
 const regions = ref(['北京','上海','浙江','江苏','广东','四川','安徽','湖北','湖南','深圳','山东','天津','重庆','福建','吉林','甘肃','贵州','辽宁','广西','西安','成都','武汉','东北'])
 const dicts = ref({})
 const testerOptions = ref([])
@@ -195,7 +202,7 @@ const load = async () => {
 }
 
 const resetQuery = () => {
-  query.value = { pageNum: 1, pageSize: query.value.pageSize, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '' }
+  query.value = { pageNum: 1, pageSize: query.value.pageSize, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '', bidStatus: '', isKeyProject: '' }
   load()
 }
 

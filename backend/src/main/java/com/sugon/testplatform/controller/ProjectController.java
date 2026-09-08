@@ -35,6 +35,7 @@ public class ProjectController {
                                                 @RequestParam(required = false) Long salesId,
                                                 @RequestParam(required = false) Long presalesId,
                                                 @RequestParam(required = false) Integer isKeyProject,
+                                                @RequestParam(required = false) String bidStatus,
                                                 @RequestParam(required = false) String bizType) {
         Map<String, Object> params = new HashMap<>();
         params.put("status", status);
@@ -49,6 +50,7 @@ public class ProjectController {
         params.put("salesId", salesId);
         params.put("presalesId", presalesId);
         params.put("isKeyProject", isKeyProject);
+        params.put("bidStatus", bidStatus);
         params.put("bizType", bizType);
         return Result.ok(projectService.page(pageNum, pageSize, params));
     }

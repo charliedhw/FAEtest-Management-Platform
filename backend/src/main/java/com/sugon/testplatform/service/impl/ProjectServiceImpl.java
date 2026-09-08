@@ -155,7 +155,13 @@ public class ProjectServiceImpl implements ProjectService {
         Object presalesId = params.get("presalesId");
         if (presalesId != null) qw.eq(TestProject::getPresalesId, presalesId);
         Object isKey = params.get("isKeyProject");
-        if (isKey != null) qw.eq(TestProject::getIsKeyProject, isKey);
+        if (isKey != null && StringUtils.hasText(isKey.toString())) {
+            qw.eq(TestProject::getIsKeyProject, Integer.valueOf(isKey.toString()));
+        }
+        Object bidStatus = params.get("bidStatus");
+        if (bidStatus != null && StringUtils.hasText(bidStatus.toString())) {
+            qw.eq(TestProject::getBidStatus, bidStatus);
+        }
         Object bizType = params.get("bizType");
         if (bizType != null && StringUtils.hasText(bizType.toString())) {
             qw.eq(TestProject::getBizType, bizType);
