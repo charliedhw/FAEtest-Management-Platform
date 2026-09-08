@@ -201,7 +201,13 @@
           </el-col>
         </el-row>
         <el-row :gutter="12">
-          <el-col :span="12"><el-form-item label="测试类型"><el-input v-model="editForm.testType" placeholder="如：AI、测试" /></el-form-item></el-col>
+          <el-col :span="12">
+            <el-form-item label="测试类型">
+              <el-select v-model="editTestTypeArr" multiple style="width:100%" placeholder="请选择测试类型">
+                <el-option v-for="d in dicts.test_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="12">
             <el-form-item label="测试方式">
               <el-select v-model="editForm.testMethod" style="width:100%" clearable placeholder="请选择">
@@ -276,6 +282,7 @@ const saving = ref(false)
 const editForm = ref({})
 const editDeviceTypeArr = ref([])
 const editTesterIdArr = ref([])
+const editTestTypeArr = ref([])
 const faeTesters = ref([])
 // 阶段任务
 const stageList = ref([])
@@ -358,6 +365,8 @@ const openEdit = () => {
   editDeviceTypeArr.value = String(project.value.deviceType || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean)
   // 回填测试人员id（tester_ids 逗号分隔）
   editTesterIdArr.value = String(project.value.testerIds || '').split(',').map(s => s.trim()).filter(Boolean)
+  // 回填测试类型（存储为顿号分隔纯文本，如 AI、CPU）
+  editTestTypeArr.value = String(project.value.testType || '').split(/[、,，\/]/).map(s => s.trim()).filter(Boolean)
   editVisible.value = true
 }
 
@@ -374,6 +383,8 @@ const handleSaveEdit = async () => {
   saving.value = true
   try {
     editForm.value.deviceType = editDeviceTypeArr.value.join(',')
+    // 测试类型存为顿号分隔纯文本，与申请保持一致格式
+    editForm.value.testType = editTestTypeArr.value.join('、')
     await updateProject(editForm.value)
     ElMessage.success('项目信息已保存')
     editVisible.value = false

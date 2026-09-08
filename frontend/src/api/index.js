@@ -112,6 +112,8 @@ export const getNotifyPage = (params) => request.get('/notify/page', { params })
 export const getUnreadCount = () => request.get('/notify/unreadCount')
 export const markRead = (id) => request.post(`/notify/read/${id}`)
 export const markAllRead = () => request.post('/notify/readAll')
+export const deleteNotify = (id) => request.delete(`/notify/${id}`)
+export const batchDeleteNotify = (ids) => request.post('/notify/batchDelete', ids)
 
 // 字典
 export const getDictByType = (type) => request.get(`/dict/type/${type}`)

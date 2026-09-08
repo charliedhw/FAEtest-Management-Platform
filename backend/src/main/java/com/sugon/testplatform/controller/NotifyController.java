@@ -37,4 +37,15 @@ public class NotifyController {
         notifyService.markAllRead(UserContext.getUserId());
         return Result.ok();
     }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        notifyService.deleteMsg(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/batchDelete")
+    public Result<Integer> batchDelete(@RequestBody java.util.List<Long> ids) {
+        return Result.ok(notifyService.batchDelete(ids));
+    }
 }

@@ -13,4 +13,8 @@ public interface NotifyService {
     long unreadCount(Long userId);
     void markRead(Long id);
     void markAllRead(Long userId);
+    // 删除自己的消息（仅已读）
+    void deleteMsg(Long id);
+    // 批量删除自己的已读消息
+    int batchDelete(java.util.List<Long> ids);
 }

@@ -76,13 +76,23 @@
           <el-empty v-if="unreadList.length === 0" description="暂无未读消息" />
         </el-tab-pane>
         <el-tab-pane name="history" label="历史消息">
-          <div v-for="msg in historyList" :key="msg.id" class="notify-item" :class="{ clickable: !!msg.jumpUrl }" @click="handleClickMsg(msg)">
-            <div class="notify-title">
-              <el-icon v-if="msg.jumpUrl" style="vertical-align:middle;margin-right:4px"><Link /></el-icon>
-              {{ msg.title }}
+          <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <el-checkbox v-model="historySelectAll" @change="toggleSelectAll" :disabled="historyList.length===0">全选</el-checkbox>
+            <el-button size="small" type="danger" :disabled="selectedMsgIds.length===0" @click="handleBatchDelete">删除({{ selectedMsgIds.length }})</el-button>
+          </div>
+          <div v-for="msg in historyList" :key="msg.id" class="notify-item" :class="{ clickable: !!msg.jumpUrl }">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <el-checkbox :model-value="selectedMsgIds.includes(msg.id)" @change="(v) => toggleMsg(msg.id, v)" @click.stop style="margin-top:2px" />
+              <div style="flex:1" @click="handleClickMsg(msg)">
+                <div class="notify-title">
+                  <el-icon v-if="msg.jumpUrl" style="vertical-align:middle;margin-right:4px"><Link /></el-icon>
+                  {{ msg.title }}
+                </div>
+                <div class="notify-content">{{ msg.content }}</div>
+                <div class="notify-time">{{ formatDateTime(msg.createTime) }}</div>
+              </div>
+              <el-button link type="danger" size="small" @click.stop="handleDeleteMsg(msg)">删除</el-button>
             </div>
-            <div class="notify-content">{{ msg.content }}</div>
-            <div class="notify-time">{{ formatDateTime(msg.createTime) }}</div>
           </div>
           <el-empty v-if="historyList.length === 0" description="暂无历史消息" />
         </el-tab-pane>
@@ -108,7 +118,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../../store/user'
-import { getNotifyPage, getUnreadCount, markRead, markAllRead, changePassword } from '../../api'
+import { getNotifyPage, getUnreadCount, markRead, markAllRead, changePassword, deleteNotify, batchDeleteNotify } from '../../api'
 import { formatDateTime } from '../../utils/format'
 
 const router = useRouter()
@@ -121,6 +131,37 @@ const historyList = ref([])
 const unreadCount = ref(0)
 const pwdVisible = ref(false)
 const pwdForm = ref({ oldPassword: '', newPassword: '' })
+// 历史消息多选删除
+const selectedMsgIds = ref([])
+const historySelectAll = ref(false)
+
+const toggleMsg = (id, checked) => {
+  if (checked) {
+    if (!selectedMsgIds.value.includes(id)) selectedMsgIds.value.push(id)
+  } else {
+    selectedMsgIds.value = selectedMsgIds.value.filter(x => x !== id)
+  }
+  historySelectAll.value = selectedMsgIds.value.length === historyList.value.length && historyList.value.length > 0
+}
+const toggleSelectAll = (checked) => {
+  selectedMsgIds.value = checked ? historyList.value.map(m => m.id) : []
+}
+const handleDeleteMsg = async (msg) => {
+  await ElMessageBox.confirm('确认删除该消息？', '提示', { type: 'warning' })
+  await deleteNotify(msg.id)
+  ElMessage.success('已删除')
+  selectedMsgIds.value = selectedMsgIds.value.filter(x => x !== msg.id)
+  loadNotify()
+}
+const handleBatchDelete = async () => {
+  if (selectedMsgIds.value.length === 0) return
+  await ElMessageBox.confirm(`确认删除选中的 ${selectedMsgIds.value.length} 条消息？`, '提示', { type: 'warning' })
+  const res = await batchDeleteNotify(selectedMsgIds.value)
+  ElMessage.success(`已删除 ${res.data} 条`)
+  selectedMsgIds.value = []
+  historySelectAll.value = false
+  loadNotify()
+}
 
 // 资源管理模块: 测试审批组(APPROVER)、FAE负责人(FAE_LEADER)、资源管理员(RESOURCE_ADMIN)、管理员(ADMIN)可见
 const canSeeResource = computed(() =>

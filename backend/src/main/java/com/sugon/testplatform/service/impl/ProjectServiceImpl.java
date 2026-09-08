@@ -202,7 +202,9 @@ public class ProjectServiceImpl implements ProjectService {
         perm.put("updateBid", true);
         perm.put("setKey", isAdmin || isApprover);
         perm.put("editProgress", isAdmin || isAssignedTester);
-        perm.put("delete", isAdmin || roles.contains("RESOURCE_ADMIN") || roles.contains("FAE_LEADER"));
+        boolean canDelete = isAdmin || roles.contains("RESOURCE_ADMIN") || roles.contains("FAE_LEADER")
+                || ("CLOSED".equals(project.getStatus()) && uid != null && uid.equals(project.getCreateBy()));
+        perm.put("delete", canDelete);
         return perm;
     }
 
@@ -336,9 +338,13 @@ public class ProjectServiceImpl implements ProjectService {
     public void delete(Long id) {
         TestProject project = projectMapper.selectById(id);
         if (project == null) throw new BizException("项目不存在");
-        // 只有管理员/资源管理员/FAE负责人可删除
+        // 管理员/资源管理员/FAE负责人可删除任意项目；已关闭(撤回)项目允许创建人删除
         java.util.List<String> roles = UserContext.getRoles();
+        Long uid = UserContext.getUserId();
         boolean canDelete = roles.contains("ADMIN") || roles.contains("RESOURCE_ADMIN") || roles.contains("FAE_LEADER");
+        if (!canDelete && "CLOSED".equals(project.getStatus()) && uid != null && uid.equals(project.getCreateBy())) {
+            canDelete = true;
+        }
         if (!canDelete) {
             throw new BizException("无权限删除项目，请联系管理员");
         }

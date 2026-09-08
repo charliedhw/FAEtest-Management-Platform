@@ -83,7 +83,7 @@
         <el-table-column label="操作" :width="colWidths.__ops || 150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="$router.push(`/project/${row.id}`)">详情</el-button>
-            <el-button v-if="canDelete" link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canDeleteRow(row)" link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -111,7 +111,11 @@ const deviceOptions = ref([])
 const tableKey = ref(0)
 
 const userStore = useUserStore()
-const canDelete = computed(() => userStore.hasRole('ADMIN') || userStore.hasRole('RESOURCE_ADMIN') || userStore.hasRole('FAE_LEADER'))
+// 管理员/资源管理员/FAE负责人可删任意项目；已关闭(撤回)项目创建人可删
+const canDeleteRow = (row) => {
+  if (userStore.hasRole('ADMIN') || userStore.hasRole('RESOURCE_ADMIN') || userStore.hasRole('FAE_LEADER')) return true
+  return row.status === 'CLOSED' && String(row.createBy) === String(userStore.userId)
+}
 
 const statusMap = { NOT_START: '未开始', IN_PROGRESS: '进行中', PAUSED: '暂停', COMPLETED: '已完成', CLOSED: '关闭', REJECTED: '已驳回' }
 const statusType = (s) => ({ NOT_START: 'info', IN_PROGRESS: 'warning', PAUSED: 'warning', COMPLETED: 'success', CLOSED: 'info', REJECTED: 'danger' }[s] || '')

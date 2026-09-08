@@ -94,4 +94,28 @@ public class NotifyServiceImpl implements NotifyService {
         notifyMsgMapper.update(update, new LambdaQueryWrapper<NotifyMsg>()
                 .eq(NotifyMsg::getUserId, userId).eq(NotifyMsg::getIsRead, 0));
     }
+
+    @Override
+    public void deleteMsg(Long id) {
+        NotifyMsg existing = notifyMsgMapper.selectById(id);
+        if (existing == null || !existing.getUserId().equals(UserContext.requireUserId())) {
+            throw new com.sugon.testplatform.common.BizException("无权操作该消息");
+        }
+        notifyMsgMapper.deleteById(id);
+    }
+
+    @Override
+    public int batchDelete(java.util.List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        Long uid = UserContext.requireUserId();
+        int count = 0;
+        for (Long id : ids) {
+            NotifyMsg existing = notifyMsgMapper.selectById(id);
+            if (existing != null && existing.getUserId().equals(uid)) {
+                notifyMsgMapper.deleteById(id);
+                count++;
+            }
+        }
+        return count;
+    }
 }
