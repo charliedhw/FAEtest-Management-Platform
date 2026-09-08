@@ -12,6 +12,7 @@ import com.sugon.testplatform.mapper.TestApplicationMapper;
 import com.sugon.testplatform.mapper.TestProgressMapper;
 import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.mapper.TestReportMapper;
+import com.sugon.testplatform.mapper.SysUserMapper;
 import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.ProjectService;
 import com.sugon.testplatform.service.ReportService;
@@ -36,16 +37,19 @@ public class ProjectServiceImpl implements ProjectService {
     private final TestApplicationMapper applicationMapper;
     private final ReportService reportService;
     private final ResourceService resourceService;
+    private final SysUserMapper sysUserMapper;
 
     public ProjectServiceImpl(TestProjectMapper projectMapper, TestProgressMapper progressMapper,
                               TestReportMapper reportMapper, TestApplicationMapper applicationMapper,
-                              ReportService reportService, @Lazy ResourceService resourceService) {
+                              ReportService reportService, @Lazy ResourceService resourceService,
+                              SysUserMapper sysUserMapper) {
         this.projectMapper = projectMapper;
         this.progressMapper = progressMapper;
         this.reportMapper = reportMapper;
         this.applicationMapper = applicationMapper;
         this.reportService = reportService;
         this.resourceService = resourceService;
+        this.sysUserMapper = sysUserMapper;
     }
 
     @Override
@@ -283,6 +287,19 @@ public class ProjectServiceImpl implements ProjectService {
             TestProject old = projectMapper.selectById(project.getId());
             if (old != null && !project.getIsKeyProject().equals(old.getIsKeyProject())) {
                 checkSetKeyPermission();
+            }
+        }
+        // 测试人员以 testerIds 为准：变更时按id解析姓名同步 testerNames，保证与FAE组人员关联
+        if (StringUtils.hasText(project.getTesterIds())) {
+            List<Long> ids = java.util.Arrays.stream(project.getTesterIds().split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .map(s -> { try { return Long.valueOf(s); } catch (NumberFormatException e) { return null; } })
+                    .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toList());
+            if (!ids.isEmpty()) {
+                String names = sysUserMapper.selectBatchIds(ids).stream()
+                        .map(com.sugon.testplatform.entity.SysUser::getRealName)
+                        .collect(java.util.stream.Collectors.joining("/"));
+                project.setTesterNames(names);
             }
         }
         projectMapper.updateById(project);

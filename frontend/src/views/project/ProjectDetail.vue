@@ -211,7 +211,13 @@
           </el-col>
         </el-row>
         <el-row :gutter="12">
-          <el-col :span="12"><el-form-item label="测试人员"><el-input v-model="editForm.testerNames" placeholder="多个用顿号、分隔" /></el-form-item></el-col>
+          <el-col :span="12">
+            <el-form-item label="测试人员">
+              <el-select v-model="editTesterIdArr" multiple style="width:100%" placeholder="从FAE测试组选择" @change="onEditTesterChange">
+                <el-option v-for="u in faeTesters" :key="u.id" :label="u.realName" :value="String(u.id)" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="12"><el-form-item label="申请周期"><el-input v-model="editForm.applyPeriod" placeholder="如：15天" /></el-form-item></el-col>
         </el-row>
         <el-row :gutter="12">
@@ -253,7 +259,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProjectDetail, updateProjectStatus, updateProject, listProgress, addProgress, listReport, uploadReport, deleteReport, getAllDict, listStage, addStage, updateStage, deleteStage, getProjectProgress } from '../../api'
+import { getProjectDetail, updateProjectStatus, updateProject, listProgress, addProgress, listReport, uploadReport, deleteReport, getAllDict, listStage, addStage, updateStage, deleteStage, getProjectProgress, listUserByRole } from '../../api'
 import { formatDateTime, formatDate, formatTestType } from '../../utils/format'
 
 const route = useRoute()
@@ -269,6 +275,8 @@ const editVisible = ref(false)
 const saving = ref(false)
 const editForm = ref({})
 const editDeviceTypeArr = ref([])
+const editTesterIdArr = ref([])
+const faeTesters = ref([])
 // 阶段任务
 const stageList = ref([])
 const progressData = ref({ total: 0, done: 0, inProgress: 0, notStart: 0, percent: 0 })
@@ -348,7 +356,17 @@ const changeStatus = async (status) => {
 const openEdit = () => {
   editForm.value = { ...project.value }
   editDeviceTypeArr.value = String(project.value.deviceType || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+  // 回填测试人员id（tester_ids 逗号分隔）
+  editTesterIdArr.value = String(project.value.testerIds || '').split(',').map(s => s.trim()).filter(Boolean)
   editVisible.value = true
+}
+
+// 测试人员下拉变更：同步 testerIds 与 testerNames
+const onEditTesterChange = () => {
+  editForm.value.testerIds = editTesterIdArr.value.join(',')
+  editForm.value.testerNames = editTesterIdArr.value
+    .map(id => (faeTesters.value.find(u => String(u.id) === id) || {}).realName)
+    .filter(Boolean).join('/')
 }
 
 // 保存编辑
@@ -424,6 +442,11 @@ onMounted(async () => {
   load()
   const res = await getAllDict()
   dicts.value = res.data
+  // 加载FAE测试组人员供编辑测试人员下拉
+  try {
+    const tr = await listUserByRole('TESTER')
+    faeTesters.value = tr.data || []
+  } catch { faeTesters.value = [] }
 })
 </script>
 

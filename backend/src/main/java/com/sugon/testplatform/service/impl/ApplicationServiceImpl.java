@@ -78,17 +78,40 @@ public class ApplicationServiceImpl implements ApplicationService {
         // 暂停借用校验
         checkBorrowLimit(userId);
 
-        TestApplication app = new TestApplication();
-        BeanUtils.copyProperties(req, app);
+        TestApplication app;
+        // 草稿直接提交：复用原申请单更新（保留单号），避免产生新单
+        if (req.getId() != null) {
+            TestApplication exist = applicationMapper.selectById(req.getId());
+            if (exist == null) throw new BizException("申请单不存在");
+            if (!ST_DRAFT.equals(exist.getStatus())) {
+                throw new BizException("只有草稿状态的申请才能修改后提交");
+            }
+            if (!exist.getApplicantId().equals(userId)) {
+                throw new BizException("只能提交自己的草稿");
+            }
+            app = exist;
+            BeanUtils.copyProperties(req, app);
+            app.setId(exist.getId());
+            app.setAppNo(exist.getAppNo());
+            app.setApplicantId(exist.getApplicantId());
+            app.setApplicantName(exist.getApplicantName());
+        } else {
+            app = new TestApplication();
+            BeanUtils.copyProperties(req, app);
+            app.setAppNo(genAppNo());
+            app.setApplicantId(userId);
+            app.setApplicantName(realName);
+        }
         // 测试类型: JSON数组字符串转顿号分隔纯文本
         app.setTestType(normalizeTestType(req.getTestType()));
-        app.setAppNo(genAppNo());
-        app.setApplicantId(userId);
-        app.setApplicantName(realName);
         // 售前提交后直接进入测试审批组审批
         app.setStatus(ST_APPROVAL);
         app.setCurrentNode(NODE_APPROVAL);
-        applicationMapper.insert(app);
+        if (req.getId() != null) {
+            applicationMapper.updateById(app);
+        } else {
+            applicationMapper.insert(app);
+        }
 
         record(app.getId(), NODE_APPROVAL, userId, realName, "SUBMIT", "售前发起测试申请");
         // 通知测试审批组 -> 跳转审批中心
@@ -111,11 +134,20 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (req.getId() != null) {
             app = applicationMapper.selectById(req.getId());
             if (app == null) throw new BizException("申请单不存在");
+            if (!ST_DRAFT.equals(app.getStatus())) {
+                throw new BizException("只有草稿状态的申请才能修改");
+            }
+            if (!app.getApplicantId().equals(userId)) {
+                throw new BizException("只能修改自己的草稿");
+            }
             BeanUtils.copyProperties(req, app);
+            app.setId(app.getId());
+            app.setTestType(normalizeTestType(req.getTestType()));
             applicationMapper.updateById(app);
         } else {
             app = new TestApplication();
             BeanUtils.copyProperties(req, app);
+            app.setTestType(normalizeTestType(req.getTestType()));
             app.setAppNo(genAppNo());
             app.setApplicantId(userId);
             app.setApplicantName(UserContext.getRealName());
@@ -285,6 +317,10 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         // 数据权限：审批组/领导/管理员看全部；其他只看自己申请或关联自己的
         applyAppDataScope(qw);
+        // 待办视图（审批中心）不显示草稿：草稿只应出现在申请人自己的申请列表
+        if (todoOnly) {
+            qw.ne(TestApplication::getStatus, ST_DRAFT);
+        }
         qw.orderByDesc(TestApplication::getCreateTime);
         Page<TestApplication> result = applicationMapper.selectPage(page, qw);
         return new PageResult<>(result.getTotal(), result.getRecords());
@@ -352,6 +388,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (roles.contains("LEADER")) nodes.add(NODE_LEADER);
         if (roles.contains("RESOURCE_ADMIN")) nodes.add(NODE_ASSIGN);
 
+        // 审批中心待办不显示草稿（草稿只属于申请人）
+        qw.ne(TestApplication::getStatus, ST_DRAFT);
         if (!nodes.isEmpty()) {
             qw.in(TestApplication::getCurrentNode, nodes);
         } else {

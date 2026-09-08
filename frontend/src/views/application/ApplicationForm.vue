@@ -235,7 +235,8 @@ onMounted(async () => {
   if (route.query.id) {
     const detail = await getApplicationDetail(route.query.id)
     Object.assign(form, detail.data)
-    form.id = null
+    // 草稿保留id以便更新；已提交/被驳回的作为重新提交则清空id新建
+    if (detail.data.status !== 'DRAFT') form.id = null
     try { testTypeArr.value = JSON.parse(detail.data.testType || '[]') } catch { testTypeArr.value = [] }
     deviceTypeArr.value = String(detail.data.deviceType || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean)
   }

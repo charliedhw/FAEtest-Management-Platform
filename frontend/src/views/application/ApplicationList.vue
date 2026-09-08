@@ -30,6 +30,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button v-if="row.status === 'DRAFT' && row.applicantId == userStore.userId" link type="primary" size="small" @click="editDraft(row)">编辑</el-button>
             <el-button v-if="row.status === 'REJECTED' && row.applicantId == userStore.userId" link type="warning" size="small" @click="resubmit(row)">重新提交</el-button>
             <el-button v-if="['DRAFT','PENDING_PRESALES'].includes(row.status) && row.applicantId == userStore.userId" link type="danger" size="small" @click="handleWithdraw(row)">撤回</el-button>
           </template>
@@ -99,6 +100,7 @@ const load = async () => {
 
 const viewDetail = (row) => { detail.value = row; detailVisible.value = true }
 const resubmit = (row) => { router.push({ path: '/application/create', query: { id: row.id } }) }
+const editDraft = (row) => { router.push({ path: '/application/create', query: { id: row.id } }) }
 const handleWithdraw = async (row) => {
   await ElMessageBox.confirm('确认撤回该申请？', '提示', { type: 'warning' })
   await withdrawApplication(row.id)
