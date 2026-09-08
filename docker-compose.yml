@@ -6,7 +6,7 @@ services:
     container_name: tp-frontend
     restart: always
     ports:
-      - "80:80"
+      - "6080:80"
     depends_on:
       - backend
     networks: [tp-net]
