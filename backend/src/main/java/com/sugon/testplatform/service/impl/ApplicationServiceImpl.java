@@ -305,6 +305,27 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
+    @Transactional
+    public void deleteApplication(Long appId) {
+        TestApplication app = applicationMapper.selectById(appId);
+        if (app == null) throw new BizException("申请单不存在");
+        Long uid = UserContext.requireUserId();
+        boolean isAdmin = UserContext.getRoles().contains("ADMIN");
+        // 申请人可删除自己的 草稿/已关闭(撤回)/已驳回；管理员可删任意
+        if (!isAdmin) {
+            if (!app.getApplicantId().equals(uid)) {
+                throw new BizException("只能删除自己的申请");
+            }
+            if (!ST_DRAFT.equals(app.getStatus()) && !ST_CLOSED.equals(app.getStatus()) && !ST_REJECTED.equals(app.getStatus())) {
+                throw new BizException("审批中/已立项的申请不能删除");
+            }
+        }
+        // 级联删除审批记录
+        approvalRecordMapper.delete(new LambdaQueryWrapper<ApprovalRecord>().eq(ApprovalRecord::getAppId, appId));
+        applicationMapper.deleteById(appId);
+    }
+
+    @Override
     public PageResult<TestApplication> page(int pageNum, int pageSize, String status, String keyword, Long applicantId, boolean todoOnly) {
         Page<TestApplication> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<TestApplication> qw = new LambdaQueryWrapper<>();

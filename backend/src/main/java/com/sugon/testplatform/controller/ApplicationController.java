@@ -55,6 +55,12 @@ public class ApplicationController {
         return Result.ok();
     }
 
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        applicationService.deleteApplication(id);
+        return Result.ok();
+    }
+
     @GetMapping("/page")
     public Result<PageResult<TestApplication>> page(@RequestParam(defaultValue = "1") int pageNum,
                                                     @RequestParam(defaultValue = "10") int pageSize,

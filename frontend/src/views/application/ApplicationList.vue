@@ -33,6 +33,7 @@
             <el-button v-if="row.status === 'DRAFT' && row.applicantId == userStore.userId" link type="primary" size="small" @click="editDraft(row)">编辑</el-button>
             <el-button v-if="row.status === 'REJECTED' && row.applicantId == userStore.userId" link type="warning" size="small" @click="resubmit(row)">重新提交</el-button>
             <el-button v-if="['DRAFT','PENDING_PRESALES'].includes(row.status) && row.applicantId == userStore.userId" link type="danger" size="small" @click="handleWithdraw(row)">撤回</el-button>
+            <el-button v-if="canDeleteRow(row)" link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -67,7 +68,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getApplicationPage, withdrawApplication } from '../../api'
+import { getApplicationPage, withdrawApplication, deleteApplication } from '../../api'
 import { formatDateTime, formatTestType } from '../../utils/format'
 import { useUserStore } from '../../store/user'
 
@@ -105,6 +106,18 @@ const handleWithdraw = async (row) => {
   await ElMessageBox.confirm('确认撤回该申请？', '提示', { type: 'warning' })
   await withdrawApplication(row.id)
   ElMessage.success('已撤回')
+  load()
+}
+
+// 草稿/已关闭(撤回)/已驳回 且为本人申请，或管理员 → 可删除
+const canDeleteRow = (row) => {
+  if (userStore.hasRole('ADMIN')) return true
+  return ['DRAFT', 'CLOSED', 'REJECTED'].includes(row.status) && row.applicantId == userStore.userId
+}
+const handleDelete = async (row) => {
+  await ElMessageBox.confirm(`确认删除申请【${row.projectName}】？此操作不可恢复`, '警告', { type: 'error', confirmButtonText: '删除', cancelButtonText: '取消' })
+  await deleteApplication(row.id)
+  ElMessage.success('已删除')
   load()
 }
 
