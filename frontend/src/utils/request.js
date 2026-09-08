@@ -28,6 +28,10 @@ const handleUnauthorized = () => {
 request.interceptors.response.use(
   response => {
     const res = response.data
+    // blob 响应(文件下载)直接放行，由调用方处理
+    if (response.config.responseType === 'blob') {
+      return response
+    }
     if (res.code !== 200) {
       if (res.code === 401) {
         handleUnauthorized()
@@ -38,10 +42,21 @@ request.interceptors.response.use(
     }
     return res
   },
-  error => {
+  async error => {
     // HTTP 状态码 401 (JWT过期/无效)
     if (error.response && error.response.status === 401) {
       handleUnauthorized()
+      return Promise.reject(error)
+    }
+    // blob 响应的业务错误：解析 JSON 提示
+    if (error.response && error.response.config?.responseType === 'blob' && error.response.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const json = JSON.parse(text)
+        ElMessage.error(json.msg || '请求失败')
+      } catch {
+        ElMessage.error('请求失败')
+      }
       return Promise.reject(error)
     }
     ElMessage.error(error.response?.data?.msg || error.message || '网络错误')

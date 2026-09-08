@@ -265,7 +265,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProjectDetail, updateProjectStatus, updateProject, listProgress, addProgress, listReport, uploadReport, deleteReport, getAllDict, listStage, addStage, updateStage, deleteStage, getProjectProgress, listUserByRole } from '../../api'
+import { getProjectDetail, updateProjectStatus, updateProject, listProgress, addProgress, listReport, uploadReport, deleteReport, downloadReport, getAllDict, listStage, addStage, updateStage, deleteStage, getProjectProgress, listUserByRole } from '../../api'
 import { formatDateTime, formatDate, formatTestType } from '../../utils/format'
 
 const route = useRoute()
@@ -437,9 +437,29 @@ const handleUpload = async ({ file }) => {
   load()
 }
 
-const handleDownload = (row) => {
-  const token = localStorage.getItem('token')
-  window.open(`/api/report/download/${row.id}?token=${token}`, '_blank')
+const handleDownload = async (row) => {
+  try {
+    const resp = await downloadReport(row.id)
+    // 后端若返回JSON业务错误(blob形式)，解析提示
+    if (resp.data.type && resp.data.type.includes('application/json')) {
+      const text = await resp.data.text()
+      const json = JSON.parse(text)
+      ElMessage.error(json.msg || '下载失败')
+      return
+    }
+    const blob = new Blob([resp.data])
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = row.fileName || 'report'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    // request.js 已统一提示，此处兜底
+    if (!e?.__handled) { /* 已toast */ }
+  }
 }
 
 const handleDeleteReport = async (row) => {
