@@ -20,8 +20,8 @@ if [ -f "$APP_DIR/.env" ]; then
   set -a; source $APP_DIR/.env; set +a
 fi
 # 去除 Windows CRLF 可能带入的回车符
-MYSQL_ROOT_PASSWORD=$(echo -n "${MYSQL_ROOT_PASSWORD:-Sugon@root2026}" | tr -d '\r')
-DB_PASSWORD=$(echo -n "${DB_PASSWORD:-Sugon@test2026}" | tr -d '\r')
+MYSQL_ROOT_PASSWORD=$(echo -n "${MYSQL_ROOT_PASSWORD:-*******}" | tr -d '\r')
+DB_PASSWORD=$(echo -n "${DB_PASSWORD:-******}" | tr -d '\r')
 
 # 日志函数(同时输出到控制台和日志文件)
 log() {
