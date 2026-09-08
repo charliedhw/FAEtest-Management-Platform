@@ -88,10 +88,16 @@ for f in $APP_DIR/.env $APP_DIR/docker-compose.yml $APP_DIR/backup.sh; do
 done
 log "    配置部署完成"
 
-# ---------- 5. 启动基础服务 ----------
-log "[5/7] 启动基础服务 (mysql/redis/minio)"
+# ---------- 5. 恢复数据库与文件(先恢复MinIO数据再启动MinIO,避免UUID不一致) ----------
+log "[5/7] 恢复数据库与文件"
 cd $APP_DIR
-docker compose up -d mysql redis minio
+# 读取密码(统一去除 .env CRLF 带入的回车符)
+set -a; source $APP_DIR/.env; set +a
+DB_PASSWORD=$(echo -n "$DB_PASSWORD" | tr -d '\r')
+MYSQL_ROOT_PASSWORD=$(echo -n "$MYSQL_ROOT_PASSWORD" | tr -d '\r')
+
+# 先启动 mysql/redis 用于数据库恢复；minio 暂不启动，待其数据目录就绪后再启动
+docker compose up -d mysql redis
 log "    等待 MySQL 就绪..."
 for i in $(seq 1 30); do
   if docker exec tp-mysql mysqladmin ping -h localhost >/dev/null 2>&1; then
@@ -100,13 +106,6 @@ for i in $(seq 1 30); do
   fi
   sleep 2
 done
-
-# ---------- 6. 恢复数据 ----------
-log "[6/7] 恢复数据库与文件"
-# 读取密码(统一去除 .env CRLF 带入的回车符)
-set -a; source $APP_DIR/.env; set +a
-DB_PASSWORD=$(echo -n "$DB_PASSWORD" | tr -d '\r')
-MYSQL_ROOT_PASSWORD=$(echo -n "$MYSQL_ROOT_PASSWORD" | tr -d '\r')
 
 # 恢复数据库(优先用 root,失败则用 testplatform)
 if [ -f "$MIG_DIR/data/test_platform.sql.gz" ]; then
@@ -127,16 +126,40 @@ else
   log "    无数据库备份,将使用初始化脚本建表"
 fi
 
-# 恢复 MinIO 文件
+# 恢复 MinIO 文件(关键:必须在启动 minio 容器之前完成,否则运行实例与被覆盖目录的磁盘UUID不一致,MinIO自我保护挂起写操作)
 if [ -f "$MIG_DIR/data/minio.tar.gz" ]; then
-  tar -xzf $MIG_DIR/data/minio.tar.gz -C $APP_DIR/data/
+  log "    恢复 MinIO 文件..."
+  # 确保目标目录干净:若已存在空的初始化目录则先清空,避免备份覆盖到已初始化(带新UUID)的目录
+  if [ -d "$APP_DIR/data/minio" ]; then
+    mv $APP_DIR/data/minio $APP_DIR/data/minio.bak.$(date +%Y%m%d%H%M%S)
+  fi
+  mkdir -p $APP_DIR/data/minio
+  # 兼容两种包结构：mc导出(无minio前缀,内容为各bucket目录) 或直接tar(含minio/前缀)
+  if tar -tzf $MIG_DIR/data/minio.tar.gz 2>/dev/null | head -1 | grep -q '^minio/'; then
+    tar -xzf $MIG_DIR/data/minio.tar.gz -C $APP_DIR/data/
+  else
+    tar -xzf $MIG_DIR/data/minio.tar.gz -C $APP_DIR/data/minio/
+  fi
   log "    MinIO 文件恢复完成"
 fi
+
+# MinIO 数据就绪后再启动 MinIO
+log "    启动 MinIO..."
+docker compose up -d minio
+sleep 3
 
 # ---------- 7. 启动应用 ----------
 log "[7/7] 启动应用服务"
 docker compose up -d
 sleep 5
+
+# 健康检查: MinIO 写能力(上传)是否恢复
+log "    验证 MinIO 写能力..."
+if docker exec tp-backend sh -c 'wget -qO- http://minio:9000/minio/health/live' >/dev/null 2>&1; then
+  log "    MinIO 健康检查通过"
+else
+  err "    MinIO 健康检查未通过,请检查: docker logs tp-minio"
+fi
 
 echo ""
 echo "==================================================="
@@ -145,7 +168,7 @@ echo "==================================================="
 docker compose ps
 echo ""
 IP=$(hostname -I | awk '{print $1}')
-echo "访问地址: http://$IP"
+echo "访问地址: http://$IP:6080"
 echo "管理员账号: admin / Admin@123"
 echo ""
-echo "验证: curl http://localhost/ 应返回前端页面"
+echo "验证: curl http://localhost:6080/ 应返回前端页面"

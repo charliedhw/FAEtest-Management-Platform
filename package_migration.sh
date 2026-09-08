@@ -43,11 +43,33 @@ fi
 # ---------- 2. MinIO 文件 ----------
 echo ""
 echo "==> [2/6] 打包 MinIO 报告文件"
-if [ -d "$APP_DIR/data/minio" ] && [ "$(ls -A $APP_DIR/data/minio 2>/dev/null)" ]; then
-  tar -czf $WORK_DIR/data/minio.tar.gz -C $APP_DIR/data minio
-  echo "    MinIO打包成功: $(du -h $WORK_DIR/data/minio.tar.gz | cut -f1)"
+# 用 mc 做一致性导出(而非直接tar运行中数据目录)，避免携带运行实例的临时状态/UUID，
+# 否则目标节点恢复后 MinIO 会因磁盘UUID与实例不一致而挂起写操作
+if docker exec tp-minio sh -c 'mc --version' >/dev/null 2>&1; then
+  docker exec tp-minio sh -c "mc alias set src http://127.0.0.1:9000 \"$MINIO_ACCESS_KEY\" \"$MINIO_SECRET_KEY\" >/dev/null 2>&1"
+  mkdir -p $WORK_DIR/data/minio_export
+  for bucket in $(docker exec tp-minio sh -c 'mc ls src 2>/dev/null | awk "{print \$NF}"'); do
+    docker exec tp-minio sh -c "mc mirror src/$bucket /tmp/mc_export/$bucket >/dev/null 2>&1"
+  done
+  # 从容器拷出再打包
+  docker cp tp-minio:/tmp/mc_export/. $WORK_DIR/data/minio_export/ 2>/dev/null || true
+  docker exec tp-minio sh -c 'rm -rf /tmp/mc_export' 2>/dev/null || true
+  if [ "$(ls -A $WORK_DIR/data/minio_export 2>/dev/null)" ]; then
+    tar -czf $WORK_DIR/data/minio.tar.gz -C $WORK_DIR/data/minio_export .
+    echo "    MinIO打包成功(mc一致性导出): $(du -h $WORK_DIR/data/minio.tar.gz | cut -f1)"
+  else
+    echo "    MinIO无数据,跳过"
+  fi
+  rm -rf $WORK_DIR/data/minio_export
 else
-  echo "    MinIO无数据,跳过"
+  # 回退：直接tar(在minio停止时更安全，这里先提示)
+  echo "    [提示] MinIO 容器无 mc，回退为直接打包数据目录"
+  if [ -d "$APP_DIR/data/minio" ] && [ "$(ls -A $APP_DIR/data/minio 2>/dev/null)" ]; then
+    tar -czf $WORK_DIR/data/minio.tar.gz -C $APP_DIR/data minio
+    echo "    MinIO打包成功: $(du -h $WORK_DIR/data/minio.tar.gz | cut -f1)"
+  else
+    echo "    MinIO无数据,跳过"
+  fi
 fi
 
 # ---------- 3. 导出 Docker 镜像 ----------
@@ -56,9 +78,9 @@ echo "==> [3/6] 导出 Docker 镜像(自研镜像+基础镜像,新节点可离�
 docker save \
   testplatform-backend \
   testplatform-frontend \
-  mysql:8.0 \
-  redis:7-alpine \
-  minio/minio:latest \
+  mysql:8.0.36 \
+  redis:7.2-alpine \
+  minio/minio:RELEASE.2024-01-16T16-07-38Z \
   | gzip > $WORK_DIR/images/images.tar.gz
 echo "    镜像导出成功: $(du -h $WORK_DIR/images/images.tar.gz | cut -f1)"
 
