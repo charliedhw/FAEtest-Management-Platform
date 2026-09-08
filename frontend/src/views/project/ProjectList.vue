@@ -1,45 +1,27 @@
 <template>
   <div>
     <el-card shadow="never">
-      <div class="toolbar">
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-          <el-input v-model="query.keyword" placeholder="项目名/客户/编号/SPM" style="width:190px" clearable @keyup.enter="load" @clear="load" />
-          <el-select v-model="query.status" placeholder="状态" clearable style="width:100px">
-            <el-option v-for="(v,k) in statusMap" :key="k" :label="v" :value="k" />
-          </el-select>
-          <el-select v-model="query.region" placeholder="区域" clearable style="width:100px">
-            <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
-          </el-select>
-          <el-select v-model="query.tester" placeholder="测试人员" clearable filterable style="width:120px">
-            <el-option v-for="t in testerOptions" :key="t" :label="t" :value="t" />
-          </el-select>
-          <el-select v-model="query.testType" placeholder="测试类型" clearable style="width:120px">
-            <el-option v-for="d in dicts.test_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
-          </el-select>
-          <el-select v-model="query.deviceType" placeholder="测试设备" clearable filterable style="width:120px">
-            <el-option v-for="d in deviceOptions" :key="d" :label="d" :value="d" />
-          </el-select>
-          <el-select v-model="query.period" placeholder="测试周期" clearable style="width:120px">
-            <el-option label="7天内" value="LE7" />
-            <el-option label="8-15天" value="8-15" />
-            <el-option label="16-30天" value="16-30" />
-            <el-option label="31-90天" value="31-90" />
-            <el-option label="90天以上" value="GT90" />
-          </el-select>
-          <el-select v-model="query.bidStatus" placeholder="招标状态" clearable style="width:110px" @change="load">
-            <el-option v-for="d in dicts.bid_status" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
-          </el-select>
-          <el-select v-model="query.isKeyProject" placeholder="重点项目" clearable style="width:110px" @change="load">
-            <el-option label="重点项目" :value="1" />
-            <el-option label="非重点项目" :value="0" />
-          </el-select>
-          <el-date-picker v-model="query.testStartFrom" type="date" placeholder="测试开始时间" value-format="YYYY-MM-DD" style="width:150px" @change="load" />
-          <span style="color:#999">至</span>
-          <el-date-picker v-model="query.testStartTo" type="date" placeholder="测试结束时间" value-format="YYYY-MM-DD" style="width:150px" @change="load" />
-          <el-button type="primary" @click="load">查询</el-button>
+      <!-- 第一行：常用筛选 + 操作按钮 -->
+      <div class="filter-row">
+        <el-input v-model="query.keyword" placeholder="项目名/客户/编号/SPM" class="f-w-lg" clearable @keyup.enter="load" @clear="load" />
+        <el-select v-model="query.status" placeholder="状态" clearable class="f-w-sm">
+          <el-option v-for="(v,k) in statusMap" :key="k" :label="v" :value="k" />
+        </el-select>
+        <el-select v-model="query.region" placeholder="区域" clearable class="f-w-sm">
+          <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
+        </el-select>
+        <el-select v-model="query.tester" placeholder="测试人员" clearable filterable class="f-w-md">
+          <el-option v-for="t in testerOptions" :key="t" :label="t" :value="t" />
+        </el-select>
+        <el-select v-model="query.testType" placeholder="测试类型" clearable class="f-w-md">
+          <el-option v-for="d in dicts.test_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+        </el-select>
+        <el-select v-model="query.deviceType" placeholder="测试设备" clearable filterable class="f-w-md">
+          <el-option v-for="d in deviceOptions" :key="d" :label="d" :value="d" />
+        </el-select>
+        <div class="filter-actions">
+          <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-        </div>
-        <div style="display:flex;gap:8px">
           <el-popover placement="bottom-end" width="220" trigger="click">
             <template #reference>
               <el-button><el-icon><SetUp /></el-icon>列设置</el-button>
@@ -49,6 +31,28 @@
             </div>
           </el-popover>
           <el-button type="success" @click="handleExport"><el-icon><Download /></el-icon>导出Excel</el-button>
+        </div>
+      </div>
+      <!-- 第二行：更多筛选（折叠） -->
+      <div class="filter-row filter-more">
+        <el-select v-model="query.period" placeholder="测试周期" clearable class="f-w-md">
+          <el-option label="7天内" value="LE7" />
+          <el-option label="8-15天" value="8-15" />
+          <el-option label="16-30天" value="16-30" />
+          <el-option label="31-90天" value="31-90" />
+          <el-option label="90天以上" value="GT90" />
+        </el-select>
+        <el-select v-model="query.bidStatus" placeholder="招标状态" clearable class="f-w-md" @change="load">
+          <el-option v-for="d in dicts.bid_status" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+        </el-select>
+        <el-select v-model="query.isKeyProject" placeholder="重点项目" clearable class="f-w-md" @change="load">
+          <el-option label="重点项目" :value="1" />
+          <el-option label="非重点项目" :value="0" />
+        </el-select>
+        <div class="date-range">
+          <el-date-picker v-model="query.testStartFrom" type="date" placeholder="测试开始时间" value-format="YYYY-MM-DD" class="f-w-date" @change="load" />
+          <span class="date-sep">至</span>
+          <el-date-picker v-model="query.testStartTo" type="date" placeholder="测试结束时间" value-format="YYYY-MM-DD" class="f-w-date" @change="load" />
         </div>
       </div>
       <el-table :data="list" v-loading="loading" stripe :key="tableKey">
@@ -94,6 +98,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectPage, deleteProject, getAllDict, getDimensionStats } from '../../api'
 import { useUserStore } from '../../store/user'
 import { formatDateTime, formatTestType } from '../../utils/format'
+import { Search, SetUp, Download } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const list = ref([])
@@ -236,7 +241,15 @@ onMounted(() => { load(); loadFilterOptions() })
 </script>
 
 <style scoped>
-.toolbar { display: flex; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.filter-more { padding-top: 12px; border-top: 1px dashed #e4e7ed; }
+.f-w-lg { width: 220px; }
+.f-w-md { width: 130px; }
+.f-w-sm { width: 100px; }
+.f-w-date { width: 150px; }
+.date-range { display: inline-flex; align-items: center; gap: 6px; }
+.date-sep { color: #909399; font-size: 13px; }
+.filter-actions { margin-left: auto; display: flex; gap: 8px; }
 .col-header { display: flex; align-items: center; justify-content: space-between; }
 .col-resize-handle { display: inline-block; width: 8px; height: 20px; cursor: col-resize; border-right: 2px solid #dcdfe6; margin-left: 4px; }
 .col-resize-handle:hover { border-right-color: #409eff; }
