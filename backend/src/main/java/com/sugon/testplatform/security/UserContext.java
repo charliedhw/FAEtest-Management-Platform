@@ -36,5 +36,26 @@ public class UserContext {
         return (u == null || u.getRoles() == null) ? java.util.List.of() : u.getRoles();
     }
 
+    /**
+     * 要求当前用户具备指定角色，否则抛业务异常
+     */
+    public static void requireRole(String roleCode) {
+        LoginUser u = require();
+        if (u.getRoles() == null || !u.getRoles().contains(roleCode)) {
+            throw new com.sugon.testplatform.common.BizException("无权限执行该操作");
+        }
+    }
+
+    /**
+     * 是否具备任一指定角色
+     */
+    public static boolean hasAnyRole(String... roleCodes) {
+        java.util.List<String> roles = getRoles();
+        for (String r : roleCodes) {
+            if (roles.contains(r)) return true;
+        }
+        return false;
+    }
+
     public static void clear() { HOLDER.remove(); }
 }

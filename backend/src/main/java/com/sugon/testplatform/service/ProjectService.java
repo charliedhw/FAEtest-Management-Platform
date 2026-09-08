@@ -14,4 +14,6 @@ public interface ProjectService {
     void checkStartTestPermission(Long id);
     void checkSetKeyPermission();
     boolean canEditProgress(Long projectId);
+    // 当前用户是否有权查看该项目（数据范围）
+    boolean canView(Long projectId);
 }

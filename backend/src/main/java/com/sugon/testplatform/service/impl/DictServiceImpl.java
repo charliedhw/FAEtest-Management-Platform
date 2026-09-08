@@ -5,6 +5,7 @@ import com.sugon.testplatform.entity.SysConfig;
 import com.sugon.testplatform.entity.SysDict;
 import com.sugon.testplatform.mapper.SysConfigMapper;
 import com.sugon.testplatform.mapper.SysDictMapper;
+import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.DictService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class DictServiceImpl implements DictService {
 
     @Override
     public void save(SysDict dict) {
+        UserContext.requireRole("ADMIN");
         if (dict.getId() == null) {
             dictMapper.insert(dict);
         } else {
@@ -45,6 +47,7 @@ public class DictServiceImpl implements DictService {
 
     @Override
     public void delete(Long id) {
+        UserContext.requireRole("ADMIN");
         dictMapper.deleteById(id);
     }
 

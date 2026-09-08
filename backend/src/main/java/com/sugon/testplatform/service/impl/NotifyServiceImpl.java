@@ -6,6 +6,7 @@ import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.entity.NotifyMsg;
 import com.sugon.testplatform.entity.SysUser;
 import com.sugon.testplatform.mapper.NotifyMsgMapper;
+import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.NotifyService;
 import com.sugon.testplatform.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +77,10 @@ public class NotifyServiceImpl implements NotifyService {
 
     @Override
     public void markRead(Long id) {
+        NotifyMsg existing = notifyMsgMapper.selectById(id);
+        if (existing == null || !existing.getUserId().equals(UserContext.requireUserId())) {
+            throw new com.sugon.testplatform.common.BizException("无权操作该消息");
+        }
         NotifyMsg msg = new NotifyMsg();
         msg.setId(id);
         msg.setIsRead(1);

@@ -44,7 +44,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Long userId = Long.valueOf(claims.getSubject());
                 LoginUser user = buildLoginUser(userId, claims);
                 UserContext.set(user);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                // 携带了 token 但解析失败（过期/伪造），直接 401 终止，不再匿名放行
+                resp.setStatus(401);
+                resp.setContentType("application/json;charset=UTF-8");
+                resp.getWriter().write("{\"code\":401,\"msg\":\"token无效或已过期\"}");
+                return;
             }
         }
         try {

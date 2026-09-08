@@ -97,6 +97,9 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public List<TestReport> listByProject(Long projectId) {
+        if (!projectService.canView(projectId)) {
+            throw new BizException("无权查看该项目的报告");
+        }
         return reportMapper.selectList(new LambdaQueryWrapper<TestReport>()
                 .eq(TestReport::getProjectId, projectId)
                 .orderByDesc(TestReport::getVersion));
@@ -106,6 +109,9 @@ public class ReportServiceImpl implements ReportService {
     public void delete(Long id) {
         TestReport report = reportMapper.selectById(id);
         if (report == null) return;
+        if (!projectService.canEditProgress(report.getProjectId())) {
+            throw new BizException("无权删除该报告");
+        }
         try {
             minioClient.removeObject(RemoveObjectArgs.builder()
                     .bucket(bucket).object(report.getFileKey()).build());
@@ -119,6 +125,9 @@ public class ReportServiceImpl implements ReportService {
     public byte[] download(Long id) {
         TestReport report = reportMapper.selectById(id);
         if (report == null) throw new BizException("报告不存在");
+        if (!projectService.canView(report.getProjectId())) {
+            throw new BizException("无权下载该报告");
+        }
         try (InputStream in = minioClient.getObject(GetObjectArgs.builder()
                 .bucket(bucket).object(report.getFileKey()).build());
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {

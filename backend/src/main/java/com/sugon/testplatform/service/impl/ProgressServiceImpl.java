@@ -65,16 +65,30 @@ public class ProgressServiceImpl implements ProgressService {
 
     @Override
     public void update(TestProgress progress) {
+        TestProgress old = progressMapper.selectById(progress.getId());
+        if (old == null) throw new BizException("进展不存在");
+        if (!projectService.canEditProgress(old.getProjectId())) {
+            throw new BizException("无权修改该项目的进展");
+        }
+        progress.setProjectId(old.getProjectId());
         progressMapper.updateById(progress);
     }
 
     @Override
     public void delete(Long id) {
+        TestProgress old = progressMapper.selectById(id);
+        if (old == null) return;
+        if (!projectService.canEditProgress(old.getProjectId())) {
+            throw new BizException("无权删除该项目的进展");
+        }
         progressMapper.deleteById(id);
     }
 
     @Override
     public List<TestProgress> listByProject(Long projectId) {
+        if (!projectService.canView(projectId)) {
+            throw new BizException("无权查看该项目的进展");
+        }
         return progressMapper.selectList(new LambdaQueryWrapper<TestProgress>()
                 .eq(TestProgress::getProjectId, projectId)
                 .orderByDesc(TestProgress::getProgressDate)

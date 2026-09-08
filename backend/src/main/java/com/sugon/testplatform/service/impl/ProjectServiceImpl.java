@@ -173,6 +173,7 @@ public class ProjectServiceImpl implements ProjectService {
     public TestProject detail(Long id) {
         TestProject project = projectMapper.selectById(id);
         if (project != null) {
+            checkProjectVisible(project);
             project.setPermissions(calcPermissions(project));
         }
         return project;
@@ -235,6 +236,31 @@ public class ProjectServiceImpl implements ProjectService {
         if (!roles.contains("ADMIN") && !roles.contains("APPROVER")) {
             throw new BizException("只有管理员或测试审批组才能设置重点项目");
         }
+    }
+
+    /**
+     * 校验当前用户是否有权查看该项目（与列表数据范围一致），无权抛异常
+     */
+    public void checkProjectVisible(TestProject p) {
+        if (com.sugon.testplatform.security.DataScopeHelper.seeAll()) return;
+        Long uid = UserContext.requireUserId();
+        boolean visible = uid.equals(p.getCreateBy()) || uid.equals(p.getSalesId())
+                || uid.equals(p.getPresalesId()) || isAssignedTester(p, uid);
+        if (!visible) throw new BizException("无权查看该项目");
+    }
+
+    /**
+     * 当前用户是否有权查看该项目（数据范围）
+     */
+    @Override
+    public boolean canView(Long projectId) {
+        TestProject p = projectMapper.selectById(projectId);
+        if (p == null) return false;
+        if (com.sugon.testplatform.security.DataScopeHelper.seeAll()) return true;
+        Long uid = UserContext.getUserId();
+        if (uid == null) return false;
+        return uid.equals(p.getCreateBy()) || uid.equals(p.getSalesId())
+                || uid.equals(p.getPresalesId()) || isAssignedTester(p, uid);
     }
 
     /**

@@ -322,7 +322,20 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     public TestApplication detail(Long id) {
-        return applicationMapper.selectById(id);
+        TestApplication app = applicationMapper.selectById(id);
+        if (app == null) return null;
+        // 数据范围校验：与列表一致
+        java.util.List<String> roles = UserContext.getRoles();
+        Long uid = UserContext.requireUserId();
+        boolean seeAll = roles.contains("ADMIN") || roles.contains("APPROVER")
+                || roles.contains("LEADER") || roles.contains("RESOURCE_ADMIN")
+                || roles.contains("FAE_LEADER");
+        if (!seeAll) {
+            boolean visible = uid.equals(app.getApplicantId())
+                    || uid.equals(app.getPresalesId()) || uid.equals(app.getSalesId());
+            if (!visible) throw new BizException("无权查看该申请");
+        }
+        return app;
     }
 
     @Override

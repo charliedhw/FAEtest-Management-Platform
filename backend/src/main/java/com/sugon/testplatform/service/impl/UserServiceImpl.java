@@ -100,6 +100,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public PageResult<SysUser> page(int pageNum, int pageSize, String keyword, Long groupId) {
+        UserContext.requireRole("ADMIN");
         LambdaQueryWrapper<SysUser> qw = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             qw.like(SysUser::getUsername, keyword).or().like(SysUser::getRealName, keyword);
@@ -123,6 +124,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void save(UserSaveRequest req) {
+        UserContext.requireRole("ADMIN");
         SysUser user;
         if (req.getId() == null) {
             // create
@@ -167,6 +169,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void deleteUser(Long userId) {
+        UserContext.requireRole("ADMIN");
         SysUser user = userMapper.selectById(userId);
         if (user == null) throw new BizException("用户不存在");
         if ("admin".equals(user.getUsername())) throw new BizException("不能删除管理员账号");
@@ -189,6 +192,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void resetPassword(Long userId) {
+        UserContext.requireRole("ADMIN");
         SysUser user = userMapper.selectById(userId);
         if (user == null) throw new BizException("用户不存在");
         user.setPassword(passwordEncoder.encode(DEFAULT_PWD));
@@ -199,6 +203,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public int batchDelete(List<Long> userIds) {
+        UserContext.requireRole("ADMIN");
         if (userIds == null || userIds.isEmpty()) return 0;
         Long currentUserId = UserContext.getUserId();
         int count = 0;
@@ -217,6 +222,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public int batchResetPassword(List<Long> userIds) {
+        UserContext.requireRole("ADMIN");
         if (userIds == null || userIds.isEmpty()) return 0;
         String encoded = passwordEncoder.encode(DEFAULT_PWD);
         int count = 0;
@@ -255,6 +261,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<Long> getUserRoleIds(Long userId) {
+        UserContext.requireRole("ADMIN");
         List<SysUserRole> urs = userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
                 .eq(SysUserRole::getUserId, userId));
         return urs.stream().map(SysUserRole::getRoleId).collect(Collectors.toList());
@@ -278,6 +285,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public Map<String, Object> importUsers(org.springframework.web.multipart.MultipartFile file) {
+        UserContext.requireRole("ADMIN");
         int created = 0, skipped = 0;
         List<String> errors = new ArrayList<>();
         List<String> details = new ArrayList<>();

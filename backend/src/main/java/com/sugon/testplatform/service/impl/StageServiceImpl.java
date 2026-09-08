@@ -61,6 +61,9 @@ public class StageServiceImpl implements StageService {
 
     @Override
     public List<TestStage> listByProject(Long projectId) {
+        if (!projectService.canView(projectId)) {
+            throw new BizException("无权查看该项目的阶段任务");
+        }
         List<TestStage> stages = stageMapper.selectList(new LambdaQueryWrapper<TestStage>()
                 .eq(TestStage::getProjectId, projectId)
                 .orderByAsc(TestStage::getSort)
