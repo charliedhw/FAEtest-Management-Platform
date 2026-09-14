@@ -7,7 +7,7 @@
         <el-select v-model="query.status" placeholder="状态" clearable class="f-w-sm">
           <el-option v-for="(v,k) in statusMap" :key="k" :label="v" :value="k" />
         </el-select>
-        <el-select v-model="query.region" placeholder="区域" clearable class="f-w-sm">
+        <el-select v-model="query.region" placeholder="所属区域或行业" clearable class="f-w-md">
           <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
         </el-select>
         <el-select v-model="query.tester" placeholder="测试人员" clearable filterable class="f-w-md">
@@ -95,7 +95,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProjectPage, deleteProject, getAllDict, getDimensionStats } from '../../api'
+import { getProjectPage, deleteProject, getAllDict, getDimensionStats, exportProjects } from '../../api'
 import { useUserStore } from '../../store/user'
 import { formatDateTime, formatTestType } from '../../utils/format'
 import { Search, SetUp, Download } from '@element-plus/icons-vue'
@@ -121,11 +121,15 @@ const statusMap = { NOT_START: '未开始', IN_PROGRESS: '进行中', PAUSED: '�
 const statusType = (s) => ({ NOT_START: 'info', IN_PROGRESS: 'warning', PAUSED: 'warning', COMPLETED: 'success', CLOSED: 'info', REJECTED: 'danger' }[s] || '')
 
 // ===== 列自定义 =====
+// 列定义版本：新增/调整列时递增，使旧的列宽缓存失效
+const COL_DEF_VERSION = '2'
+
 const defaultColumns = [
   { prop: 'projectNo', label: '项目编号', width: 130, visible: true },
+  { prop: 'spmNo', label: 'SPM号', width: 110, visible: false },
   { prop: 'customerName', label: '客户名称', width: 150, minWidth: 140, visible: true },
   { prop: 'projectName', label: '项目名称', width: 220, minWidth: 180, visible: true },
-  { prop: 'region', label: '区域', width: 90, visible: true },
+  { prop: 'region', label: '所属区域或行业', width: 130, visible: true },
   { prop: 'projectStage', label: '项目阶段', width: 90, visible: true },
   { prop: 'bidStatus', label: '招标状态', width: 90, visible: true },
   { prop: 'salesName', label: '销售', width: 90, visible: true },
@@ -157,12 +161,20 @@ function loadColumns() {
 }
 
 function loadColWidths() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('project_col_widths') || 'null')
-    if (saved) return saved
-  } catch {}
   const w = {}
   defaultColumns.forEach(c => { w[c.prop] = c.width })
+  try {
+    // 列定义变更时通过版本号让旧宽度缓存失效
+    const ver = localStorage.getItem('project_col_widths_ver')
+    if (ver !== COL_DEF_VERSION) {
+      localStorage.removeItem('project_col_widths')
+      localStorage.setItem('project_col_widths_ver', COL_DEF_VERSION)
+      return w
+    }
+    const saved = JSON.parse(localStorage.getItem('project_col_widths') || 'null')
+    // 以默认宽度为基准合并用户自定义宽度，保证新增列有默认宽度
+    if (saved) return { ...w, ...saved }
+  } catch {}
   return w
 }
 
@@ -233,12 +245,28 @@ const handleDelete = async (row) => {
   load()
 }
 
-const handleExport = () => {
-  const params = new URLSearchParams()
-  if (query.value.status) params.append('status', query.value.status)
-  if (query.value.region) params.append('region', query.value.region)
-  const token = localStorage.getItem('token')
-  window.open(`/api/project/export?${params.toString()}&token=${token}`, '_blank')
+const handleExport = async () => {
+  try {
+    const params = {}
+    if (query.value.status) params.status = query.value.status
+    if (query.value.region) params.region = query.value.region
+    const resp = await exportProjects(params)
+    if (resp.data.type && resp.data.type.includes('application/json')) {
+      const text = await resp.data.text()
+      const json = JSON.parse(text)
+      ElMessage.error(json.msg || '导出失败')
+      return
+    }
+    const blob = new Blob([resp.data])
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `项目清单_${new Date().toISOString().slice(0,10)}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (e) { /* request.js 已统一提示 */ }
 }
 
 onMounted(() => { load(); loadFilterOptions() })

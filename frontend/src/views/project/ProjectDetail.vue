@@ -10,10 +10,10 @@
           </div>
         </div>
       </template>
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="2" border class="project-desc" label-width="110px">
         <el-descriptions-item label="项目编号">{{ project.projectNo }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ project.customerName }}</el-descriptions-item>
-        <el-descriptions-item label="所属区域">{{ project.region }}</el-descriptions-item>
+        <el-descriptions-item label="所属区域或行业">{{ project.region }}</el-descriptions-item>
         <el-descriptions-item label="SPM号">{{ project.spmNo }}</el-descriptions-item>
         <el-descriptions-item label="项目阶段">{{ project.projectStage }}</el-descriptions-item>
         <el-descriptions-item label="招标状态">{{ project.bidStatus }}</el-descriptions-item>
@@ -27,10 +27,10 @@
         <el-descriptions-item label="开始时间">{{ formatDate(project.testStartTime) }}</el-descriptions-item>
         <el-descriptions-item label="结束时间">{{ formatDate(project.testEndTime) }}</el-descriptions-item>
         <el-descriptions-item label="中标金额(万)">{{ project.bidAmount }}</el-descriptions-item>
-        <el-descriptions-item label="测试计划" :span="2">{{ project.testPlan }}</el-descriptions-item>
-        <el-descriptions-item label="硬件配置" :span="2">{{ project.hardwareConfig }}</el-descriptions-item>
-        <el-descriptions-item label="软件及应用" :span="2">{{ project.softwareApp }}</el-descriptions-item>
-        <el-descriptions-item label="测试结论" :span="2">{{ project.testConclusion }}</el-descriptions-item>
+        <el-descriptions-item label="测试计划" :span="2"><div class="long-text">{{ project.testPlan }}</div></el-descriptions-item>
+        <el-descriptions-item label="硬件配置" :span="2"><div class="long-text">{{ project.hardwareConfig }}</div></el-descriptions-item>
+        <el-descriptions-item label="软件及应用" :span="2"><div class="long-text">{{ project.softwareApp }}</div></el-descriptions-item>
+        <el-descriptions-item label="测试结论" :span="2"><div class="long-text">{{ project.testConclusion }}</div></el-descriptions-item>
       </el-descriptions>
 
       <!-- 操作按钮 -->
@@ -171,7 +171,7 @@
           <el-col :span="12"><el-form-item label="项目名称"><el-input v-model="editForm.projectName" /></el-form-item></el-col>
         </el-row>
         <el-row :gutter="12">
-          <el-col :span="12"><el-form-item label="所属区域"><el-input v-model="editForm.region" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="所属区域或行业"><el-input v-model="editForm.region" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="SPM号"><el-input v-model="editForm.spmNo" /></el-form-item></el-col>
         </el-row>
         <el-row :gutter="12">
@@ -239,7 +239,13 @@
           </el-col>
         </el-row>
         <el-row :gutter="12">
-          <el-col :span="12"><el-form-item label="期望资源类型"><el-input v-model="editForm.expectResourceType" /></el-form-item></el-col>
+          <el-col :span="12">
+            <el-form-item label="期望资源类型">
+              <el-select v-model="editForm.expectResourceType" style="width:100%" clearable placeholder="请选择">
+                <el-option v-for="d in dicts.resource_type" :key="d.dictValue" :label="d.dictLabel" :value="d.dictValue" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="12">
             <el-form-item label="是否内部资源">
               <el-select v-model="editForm.isInternalResource" style="width:100%" clearable placeholder="请选择">
@@ -482,6 +488,26 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 项目信息描述列表：固定label宽度避免长文本挤压导致标签竖排 */
+.project-desc :deep(.el-descriptions__label) {
+  width: 110px;
+  min-width: 110px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.project-desc :deep(.el-descriptions__content) {
+  word-break: break-word;
+  vertical-align: top;
+}
+/* 长文本内容：保留换行、限制高度可滚动，避免单行撑高整个表格 */
+.long-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
 /* 阶段进度条(甘特式) */
 .stage-gantt { border: 1px solid #ebeef5; border-radius: 6px; padding: 8px 0; }
 .stage-bar-row { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #f5f5f5; gap: 10px; }

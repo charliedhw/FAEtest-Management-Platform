@@ -74,6 +74,8 @@ export const getCurrentWeek = () => request.get('/weeklyReport/currentWeek')
 export const getWeeklyPersonSummary = (params) => request.get('/weeklyReport/personSummary', { params })
 // 报告下载（blob，token走拦截器）
 export const downloadReport = (id) => request.get(`/report/download/${id}`, { responseType: 'blob' })
+// 项目清单导出（blob，token走拦截器）
+export const exportProjects = (params) => request.get('/project/export', { params, responseType: 'blob' })
 
 // 阶段任务
 export const addStage = (data) => request.post('/stage/add', data)
