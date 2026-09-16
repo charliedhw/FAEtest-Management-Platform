@@ -93,17 +93,19 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectPage, deleteProject, getAllDict, getDimensionStats, exportProjects } from '../../api'
 import { useUserStore } from '../../store/user'
 import { formatDateTime, formatTestType } from '../../utils/format'
 import { Search, SetUp, Download } from '@element-plus/icons-vue'
 
+defineOptions({ name: 'ProjectList' })
+
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-const query = ref({ pageNum: 1, pageSize: 10, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '', bidStatus: '', isKeyProject: '' })
+const query = ref({ pageNum: 1, pageSize: 20, status: '', region: '', keyword: '', tester: '', testType: '', deviceType: '', period: '', testStartFrom: '', testStartTo: '', bidStatus: '', isKeyProject: '' })
 const regions = ref(['北京','上海','浙江','江苏','广东','四川','安徽','湖北','湖南','深圳','山东','天津','重庆','福建','吉林','甘肃','贵州','辽宁','广西','西安','成都','武汉','东北'])
 const dicts = ref({})
 const testerOptions = ref([])
@@ -111,6 +113,11 @@ const deviceOptions = ref([])
 const tableKey = ref(0)
 
 const userStore = useUserStore()
+// 列设置/列宽按用户隔离的存储key(不同账号登录同浏览器各自独立)
+const uid = userStore.userId || 'anon'
+const COL_KEY = `project_columns_${uid}`
+const WIDTH_KEY = `project_col_widths_${uid}`
+const WIDTH_VER_KEY = `project_col_widths_ver_${uid}`
 // 管理员/资源管理员/FAE负责人可删任意项目；已关闭(撤回)项目创建人可删
 const canDeleteRow = (row) => {
   if (userStore.hasRole('ADMIN') || userStore.hasRole('RESOURCE_ADMIN') || userStore.hasRole('FAE_LEADER')) return true
@@ -149,7 +156,7 @@ const colWidths = ref(loadColWidths())
 
 function loadColumns() {
   try {
-    const saved = JSON.parse(localStorage.getItem('project_columns') || 'null')
+    const saved = JSON.parse(localStorage.getItem(COL_KEY) || 'null')
     if (Array.isArray(saved)) {
       return defaultColumns.map(dc => {
         const s = saved.find(x => x.prop === dc.prop)
@@ -165,13 +172,13 @@ function loadColWidths() {
   defaultColumns.forEach(c => { w[c.prop] = c.width })
   try {
     // 列定义变更时通过版本号让旧宽度缓存失效
-    const ver = localStorage.getItem('project_col_widths_ver')
+    const ver = localStorage.getItem(WIDTH_VER_KEY)
     if (ver !== COL_DEF_VERSION) {
-      localStorage.removeItem('project_col_widths')
-      localStorage.setItem('project_col_widths_ver', COL_DEF_VERSION)
+      localStorage.removeItem(WIDTH_KEY)
+      localStorage.setItem(WIDTH_VER_KEY, COL_DEF_VERSION)
       return w
     }
-    const saved = JSON.parse(localStorage.getItem('project_col_widths') || 'null')
+    const saved = JSON.parse(localStorage.getItem(WIDTH_KEY) || 'null')
     // 以默认宽度为基准合并用户自定义宽度，保证新增列有默认宽度
     if (saved) return { ...w, ...saved }
   } catch {}
@@ -181,7 +188,7 @@ function loadColWidths() {
 const visibleColumns = computed(() => allColumns.value.filter(c => c.visible))
 
 const saveColumns = () => {
-  localStorage.setItem('project_columns', JSON.stringify(allColumns.value.map(c => ({ prop: c.prop, visible: c.visible }))))
+  localStorage.setItem(COL_KEY, JSON.stringify(allColumns.value.map(c => ({ prop: c.prop, visible: c.visible }))))
 }
 watch(allColumns, saveColumns, { deep: true })
 
@@ -204,7 +211,7 @@ const onResizing = (e) => {
 }
 const stopResize = () => {
   if (resizeState) {
-    localStorage.setItem('project_col_widths', JSON.stringify(colWidths.value))
+    localStorage.setItem(WIDTH_KEY, JSON.stringify(colWidths.value))
   }
   resizeState = null
   document.removeEventListener('mousemove', onResizing)
@@ -270,6 +277,8 @@ const handleExport = async () => {
 }
 
 onMounted(() => { load(); loadFilterOptions() })
+// keep-alive 缓存后从详情返回时触发：保留当前筛选/分页，仅刷新数据
+onActivated(() => { load() })
 </script>
 
 <style scoped>

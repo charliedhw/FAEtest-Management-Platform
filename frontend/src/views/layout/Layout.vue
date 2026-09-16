@@ -54,7 +54,11 @@
         </div>
       </el-header>
       <el-main class="main">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="['ProjectList']">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </el-main>
     </el-container>
 
@@ -214,19 +218,24 @@ const handleReadAll = async () => {
 
 const handleCommand = (cmd) => {
   if (cmd === 'logout') {
-    userStore.logout()
-    router.push('/login')
+    doLogout()
   } else if (cmd === 'password') {
     pwdVisible.value = true
   }
+}
+
+// 退出登录：清空认证后整页刷新，确保 keep-alive 缓存的页面实例(含用户级列设置缓存key)被销毁，
+// 避免同浏览器换账号后读取到上一个用户的个性化缓存
+const doLogout = () => {
+  userStore.logout()
+  location.href = '/login'
 }
 
 const handleChangePwd = async () => {
   await changePassword(pwdForm.value)
   ElMessage.success('密码修改成功，请重新登录')
   pwdVisible.value = false
-  userStore.logout()
-  router.push('/login')
+  doLogout()
 }
 
 onMounted(loadNotify)
