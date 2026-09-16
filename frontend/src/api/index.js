@@ -37,6 +37,18 @@ export const saveDraft = (data) => request.post('/application/draft', data)
 export const approveApplication = (data) => request.post('/application/approve', data)
 export const assignApplication = (data) => request.post('/application/assign', data)
 export const scheduleApplication = (data) => request.post('/application/schedule', data)
+
+// 申请附件
+export const uploadAttachment = (appId, fileType, file) => {
+  const formData = new FormData()
+  formData.append('appId', appId)
+  formData.append('fileType', fileType)
+  formData.append('file', file)
+  return request.post('/attachment/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+export const listAttachments = (appId) => request.get('/attachment/list', { params: { appId } })
+export const deleteAttachment = (id) => request.delete(`/attachment/${id}`)
+export const downloadAttachment = (id) => request.get(`/attachment/download/${id}`, { responseType: 'blob' })
 export const withdrawApplication = (id) => request.post(`/application/withdraw/${id}`)
 export const deleteApplication = (id) => request.delete(`/application/${id}`)
 export const getApplicationPage = (params) => request.get('/application/page', { params })

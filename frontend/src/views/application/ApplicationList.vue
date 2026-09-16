@@ -58,7 +58,14 @@
         <el-descriptions-item label="申请周期">{{ detail.applyPeriod }}</el-descriptions-item>
         <el-descriptions-item label="期望资源">{{ detail.expectResourceType }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="statusType(detail.status)">{{ statusMap[detail.status] || detail.status }}</el-tag></el-descriptions-item>
+        <el-descriptions-item v-if="detail.scheduleStartTime" label="排期时间">{{ detail.scheduleStartTime }} ~ {{ detail.scheduleEndTime }}（{{ detail.scheduleByName }}）</el-descriptions-item>
         <el-descriptions-item v-if="detail.rejectReason" label="驳回原因"><span style="color:#f56c6c">{{ detail.rejectReason }}</span></el-descriptions-item>
+        <el-descriptions-item v-if="detailAttachments.length" label="申请附件">
+          <div v-for="att in detailAttachments" :key="att.id" style="margin-bottom:4px">
+            <el-tag size="small" :type="att.fileType==='METRIC'?'warning':'success'" style="margin-right:6px">{{ att.fileType==='METRIC'?'指标要求':'测试方案' }}</el-tag>
+            <el-link type="primary" :underline="false" @click="handleDownloadAttachment(att)">{{ att.fileName }}</el-link>
+          </div>
+        </el-descriptions-item>
       </el-descriptions>
     </el-drawer>
   </div>
@@ -68,7 +75,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getApplicationPage, withdrawApplication, deleteApplication } from '../../api'
+import { getApplicationPage, withdrawApplication, deleteApplication, listAttachments, downloadAttachment } from '../../api'
 import { formatDateTime, formatTestType } from '../../utils/format'
 import { useUserStore } from '../../store/user'
 
@@ -79,6 +86,14 @@ const list = ref([])
 const total = ref(0)
 const detailVisible = ref(false)
 const detail = ref({})
+const detailAttachments = ref([])
+const handleDownloadAttachment = async (att) => {
+  const res = await downloadAttachment(att.id)
+  const url = URL.createObjectURL(new Blob([res.data]))
+  const a = document.createElement('a')
+  a.href = url; a.download = att.fileName; a.click()
+  URL.revokeObjectURL(url)
+}
 const query = ref({ pageNum: 1, pageSize: 10, status: '', keyword: '' })
 
 const statusMap = {
@@ -99,7 +114,11 @@ const load = async () => {
   }
 }
 
-const viewDetail = (row) => { detail.value = row; detailVisible.value = true }
+const viewDetail = async (row) => {
+  detail.value = row; detailVisible.value = true
+  detailAttachments.value = []
+  try { const res = await listAttachments(row.id); detailAttachments.value = res.data || [] } catch (e) { /* 无权限或失败忽略 */ }
+}
 const resubmit = (row) => { router.push({ path: '/application/create', query: { id: row.id } }) }
 const editDraft = (row) => { router.push({ path: '/application/create', query: { id: row.id } }) }
 const handleWithdraw = async (row) => {
