@@ -20,6 +20,11 @@ export const importUsers = (file) => {
   return request.post('/user/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export const getAllRoles = () => request.get('/user/roles')
+
+// 邮件配置
+export const getMailConfig = () => request.get('/mail/config')
+export const saveMailConfig = (data) => request.post('/mail/config', data)
+export const testMail = (toAddr) => request.post('/mail/test', { toAddr })
 export const getUserRoleIds = (userId) => request.get(`/user/roleIds/${userId}`)
 
 // 用户组

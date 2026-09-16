@@ -19,7 +19,9 @@ import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.ApplicationService;
 import com.sugon.testplatform.service.DictService;
+import com.sugon.testplatform.service.MailService;
 import com.sugon.testplatform.service.NotifyService;
+import com.sugon.testplatform.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,8 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final DictService dictService;
     private final SysUserMapper userMapper;
     private final SysUserGroupMapper userGroupMapper;
+    private final MailService mailService;
+    private final UserService userService;
 
     // 节点常量
     public static final String NODE_PRESALES = "PRESALES_EVAL";     // 售前评估(已废弃，保留兼容)
@@ -119,6 +123,9 @@ public class ApplicationServiceImpl implements ApplicationService {
         notifyService.sendToRole("APPROVER", "新的测试申请待审批",
                 "售前【" + app.getApplicantName() + "】提交了测试申请【" + app.getProjectName() + "】，请及时审批。",
                 "APPROVAL", app.getId(), "/approval");
+        mailToRole("APPROVER", "新的测试申请待审批",
+                "售前【" + app.getApplicantName() + "】提交了测试申请【" + app.getProjectName() + "】，请及时审批。",
+                "/approval", "APPROVAL", app.getId());
         return app.getId();
     }
 
@@ -176,6 +183,9 @@ public class ApplicationServiceImpl implements ApplicationService {
             notifyService.send(app.getApplicantId(), "测试申请被驳回",
                     "您的测试申请【" + app.getProjectName() + "】被驳回，原因：" + app.getRejectReason(),
                     "APPROVAL", app.getId(), "/application");
+            mailToUser(app.getApplicantId(), "测试申请被驳回",
+                    "您的测试申请【" + app.getProjectName() + "】被驳回，原因：" + app.getRejectReason(),
+                    "/application", "APPROVAL", app.getId());
             return;
         }
 
@@ -193,6 +203,9 @@ public class ApplicationServiceImpl implements ApplicationService {
                     notifyService.sendToRole("LEADER", "超期借测申请待审批",
                             "测试申请【" + app.getProjectName() + "】申请周期" + app.getApplyDays() + "天，超过" + approveDays + "天，需您审批。",
                             "APPROVAL", app.getId(), "/approval");
+                    mailToRole("LEADER", "超期借测申请待审批",
+                            "测试申请【" + app.getProjectName() + "】申请周期" + app.getApplyDays() + "天，超过" + approveDays + "天，需您审批。",
+                            "/approval", "APPROVAL", app.getId());
                 } else {
                     toAssign(app, node, userId, userName, req.getOpinion());
                 }
@@ -216,12 +229,33 @@ public class ApplicationServiceImpl implements ApplicationService {
             notifyService.send(assigneeId, "测试申请待分配任务",
                     "测试申请【" + app.getProjectName() + "】已审批通过，请分配FAE测试工程师。",
                     "APPROVAL", app.getId(), "/approval");
+            mailToUser(assigneeId, "测试申请待分配任务",
+                    "测试申请【" + app.getProjectName() + "】已审批通过，请分配FAE测试工程师。",
+                    "/approval", "APPROVAL", app.getId());
         } else {
             // 兜底：通知资源管理员角色
             notifyService.sendToRole("RESOURCE_ADMIN", "测试申请待分配资源",
                     "测试申请【" + app.getProjectName() + "】已审批通过，请分配测试资源与人员。",
                     "APPROVAL", app.getId(), "/approval");
         }
+    }
+
+    /** 给单个用户发流程邮件（按其sys_user.email） */
+    private void mailToUser(Long userId, String title, String action, String jumpUrl, String bizType, Long bizId) {
+        try {
+            if (userId == null) return;
+            com.sugon.testplatform.entity.SysUser u = userMapper.selectById(userId);
+            if (u != null) mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+        } catch (Exception e) { /* 邮件失败不影响流程 */ }
+    }
+
+    /** 给某角色所有用户发流程邮件 */
+    private void mailToRole(String roleCode, String title, String action, String jumpUrl, String bizType, Long bizId) {
+        try {
+            for (com.sugon.testplatform.entity.SysUser u : userService.listByRole(roleCode)) {
+                mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+            }
+        } catch (Exception e) { /* 邮件失败不影响流程 */ }
     }
 
     /**
@@ -273,6 +307,9 @@ public class ApplicationServiceImpl implements ApplicationService {
             notifyService.send(assigneeId, "测试项目已排期",
                     "测试申请【" + app.getProjectName() + "】已排期 " + req.getScheduleStartTime() + " ~ " + req.getScheduleEndTime() + "，请安排分配测试人员。",
                     "APPROVAL", app.getId(), "/approval");
+            mailToUser(assigneeId, "测试项目已排期",
+                    "测试申请【" + app.getProjectName() + "】已排期 " + req.getScheduleStartTime() + " ~ " + req.getScheduleEndTime() + "，请安排分配测试人员。",
+                    "/approval", "APPROVAL", app.getId());
         }
     }
 
@@ -320,9 +357,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (StringUtils.hasText(req.getTesterIds())) {
             for (String tid : req.getTesterIds().split(",")) {
                 try {
-                    notifyService.send(Long.valueOf(tid.trim()), "新测试任务分配",
+                    Long testerId = Long.valueOf(tid.trim());
+                    notifyService.send(testerId, "新测试任务分配",
                             "您被分配了测试项目【" + app.getProjectName() + "】，请及时开展测试并填写进展。",
                             "APPROVAL", project.getId(), "/project/" + project.getId());
+                    mailToUser(testerId, "新测试任务分配",
+                            "您被分配了测试项目【" + app.getProjectName() + "】，请及时开展测试并填写进展。",
+                            "/project/" + project.getId(), "APPROVAL", project.getId());
                 } catch (NumberFormatException ignored) {
                 }
             }
@@ -331,6 +372,9 @@ public class ApplicationServiceImpl implements ApplicationService {
         notifyService.send(app.getApplicantId(), "测试申请已分配",
                 "您的测试申请【" + app.getProjectName() + "】已分配资源与测试人员，项目编号:" + project.getProjectNo(),
                 "APPROVAL", project.getId(), "/project/" + project.getId());
+        mailToUser(app.getApplicantId(), "测试申请已分配",
+                "您的测试申请【" + app.getProjectName() + "】已分配资源与测试人员，项目编号:" + project.getProjectNo(),
+                "/project/" + project.getId(), "APPROVAL", project.getId());
     }
 
     @Override

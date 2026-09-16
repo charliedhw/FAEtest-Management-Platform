@@ -21,7 +21,8 @@ const routes = [
       { path: 'asset', name: 'AssetCenter', component: () => import('../views/resource/AssetCenter.vue'), meta: { title: '资产中心' } },
       { path: 'system/user', name: 'UserManage', component: () => import('../views/system/UserManage.vue'), meta: { title: '用户管理' } },
       { path: 'system/group', name: 'UserGroupManage', component: () => import('../views/system/UserGroupManage.vue'), meta: { title: '用户组管理' } },
-      { path: 'system/dict', name: 'DictManage', component: () => import('../views/system/DictManage.vue'), meta: { title: '字典管理' } }
+      { path: 'system/dict', name: 'DictManage', component: () => import('../views/system/DictManage.vue'), meta: { title: '字典管理' } },
+      { path: 'system/mail', name: 'MailSetting', component: () => import('../views/system/MailSetting.vue'), meta: { title: '邮件设置' } }
     ]
   }
 ]

@@ -23,6 +23,7 @@
           <el-menu-item index="/system/user">用户管理</el-menu-item>
           <el-menu-item index="/system/group">用户组管理</el-menu-item>
           <el-menu-item index="/system/dict">字典管理</el-menu-item>
+          <el-menu-item index="/system/mail">邮件设置</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>
