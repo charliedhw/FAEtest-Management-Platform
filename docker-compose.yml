@@ -57,6 +57,7 @@ services:
       retries: 10
     networks: [tp-net]
 
+  # 注意：镜像版本必须与数据目录已写入的格式匹配，降级会导致无法启动(RDB/xl header版本错配)
   redis:
     image: redis:7-alpine
     container_name: tp-redis
@@ -66,6 +67,7 @@ services:
       - ./data/redis:/data
     networks: [tp-net]
 
+  # 注意：latest 对应 2025-08 构建版本，现有 minio 数据已是该版本 xl 格式，不可回退到 2024 旧镜像
   minio:
     image: minio/minio:latest
     container_name: tp-minio

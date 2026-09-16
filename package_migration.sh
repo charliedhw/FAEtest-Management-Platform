@@ -75,12 +75,13 @@ fi
 # ---------- 3. 导出 Docker 镜像 ----------
 echo ""
 echo "==> [3/6] 导出 Docker 镜像(自研镜像+基础镜像,新节点可离线部署)"
+# 镜像标签必须与 docker-compose.yml 一致，否则导入后与数据目录版本不匹配会导致启动崩溃
 docker save \
   testplatform-backend \
   testplatform-frontend \
   mysql:8.0.36 \
-  redis:7.2-alpine \
-  minio/minio:RELEASE.2024-01-16T16-07-38Z \
+  redis:7-alpine \
+  minio/minio:latest \
   | gzip > $WORK_DIR/images/images.tar.gz
 echo "    镜像导出成功: $(du -h $WORK_DIR/images/images.tar.gz | cut -f1)"
 
