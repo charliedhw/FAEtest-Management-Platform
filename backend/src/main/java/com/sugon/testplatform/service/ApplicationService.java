@@ -9,7 +9,8 @@ import com.sugon.testplatform.entity.TestApplication;
 
 public interface ApplicationService {
     Long submit(ApplicationSubmitRequest req);
-    void saveDraft(ApplicationSubmitRequest req);
+    // 保存草稿，返回申请单id（便于前端继续上传附件）
+    Long saveDraft(ApplicationSubmitRequest req);
     void approve(ApprovalRequest req);
     void assign(AssignRequest req);
     // 项目排期：排期员/管理员对处于待分配节点的申请设置计划测试时间

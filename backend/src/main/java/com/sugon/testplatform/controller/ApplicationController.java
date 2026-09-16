@@ -33,9 +33,8 @@ public class ApplicationController {
     }
 
     @PostMapping("/draft")
-    public Result<Void> draft(@RequestBody ApplicationSubmitRequest req) {
-        applicationService.saveDraft(req);
-        return Result.ok();
+    public Result<Long> draft(@RequestBody ApplicationSubmitRequest req) {
+        return Result.ok(applicationService.saveDraft(req));
     }
 
     @PostMapping("/approve")

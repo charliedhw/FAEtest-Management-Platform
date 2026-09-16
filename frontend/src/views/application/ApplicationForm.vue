@@ -77,11 +77,12 @@
               <el-option label="测试方案" value="PLAN" />
             </el-select>
             <el-upload :show-file-list="false" :http-request="handleAttachmentUpload" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar" style="display:inline-block">
-              <el-button type="primary" plain :disabled="!form.id"><el-icon><Upload /></el-icon>上传附件</el-button>
+              <el-button type="primary" plain><el-icon><Upload /></el-icon>上传附件</el-button>
             </el-upload>
-            <span v-if="!form.id" style="color:#e6a23c;font-size:12px">提示：新建申请请先"保存草稿"后再上传附件</span>
+            <span v-if="!form.id && pendingFiles.length" style="color:#909399;font-size:12px">已选 {{ pendingFiles.length }} 个附件，提交或保存草稿后自动上传</span>
           </div>
-          <el-table v-if="attachments.length" :data="attachments" size="small" border style="max-width:640px">
+          <!-- 已上传附件 -->
+          <el-table v-if="attachments.length" :data="attachments" size="small" border style="max-width:640px;margin-bottom:8px">
             <el-table-column label="类型" width="120">
               <template #default="{ row }"><el-tag size="small" :type="row.fileType==='METRIC'?'warning':'success'">{{ row.fileType==='METRIC'?'测试指标要求':'测试方案' }}</el-tag></template>
             </el-table-column>
@@ -94,7 +95,22 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-text v-else-if="form.id" type="info" size="small">暂无附件</el-text>
+          <!-- 待上传附件(新建未保存) -->
+          <el-table v-if="pendingFiles.length" :data="pendingFiles" size="small" border style="max-width:640px">
+            <el-table-column label="类型" width="120">
+              <template #default="{ row }"><el-tag size="small" type="info">{{ row.fileType==='METRIC'?'测试指标要求':'测试方案' }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="文件名" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.file.name }} <el-tag size="small" type="warning" style="margin-left:4px">待上传</el-tag></template>
+            </el-table-column>
+            <el-table-column label="大小" width="90"><template #default="{ row }">{{ formatSize(row.file.size) }}</template></el-table-column>
+            <el-table-column label="操作" width="80">
+              <template #default="{ $index }">
+                <el-button link type="danger" size="small" @click="handleRemovePending($index)">移除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-text v-if="form.id && !attachments.length && !pendingFiles.length" type="info" size="small">暂无附件</el-text>
         </div>
       </el-form-item>
       <el-form-item>
@@ -125,8 +141,9 @@ const deviceTypeArr = ref([])
 const dicts = ref({})
 const salesList = ref([])
 const presalesList = ref([])
-// 附件
+// 附件：已上传(attachments) + 待上传本地文件(pendingFiles)
 const attachments = ref([])
+const pendingFiles = ref([])   // [{fileType, file}]，提交/存草稿后统一上传
 const uploadFileType = ref('METRIC')
 
 const loadAttachments = async () => {
@@ -134,12 +151,19 @@ const loadAttachments = async () => {
   const res = await listAttachments(form.id)
   attachments.value = res.data || []
 }
+// 已有id(草稿/编辑)直接上传；无id(新建)先存入待上传列表
 const handleAttachmentUpload = async ({ file }) => {
   if (!uploadFileType.value) { ElMessage.warning('请选择附件类型'); return }
-  await uploadAttachment(form.id, uploadFileType.value, file)
-  ElMessage.success('附件已上传')
-  loadAttachments()
+  if (form.id) {
+    await uploadAttachment(form.id, uploadFileType.value, file)
+    ElMessage.success('附件已上传')
+    loadAttachments()
+  } else {
+    pendingFiles.value.push({ fileType: uploadFileType.value, file })
+    ElMessage.success('附件已添加，提交/保存草稿后自动上传')
+  }
 }
+const handleRemovePending = (idx) => { pendingFiles.value.splice(idx, 1) }
 const handleDeleteAttachment = async (row) => {
   await ElMessageBox.confirm(`确认删除附件【${row.fileName}】？`, '提示', { type: 'warning' })
   await deleteAttachment(row.id)
@@ -152,6 +176,16 @@ const handleDownloadAttachment = async (row) => {
   const a = document.createElement('a')
   a.href = url; a.download = row.fileName; a.click()
   URL.revokeObjectURL(url)
+}
+// 提交/存草稿拿到id后，统一上传待上传附件
+const uploadPendingFiles = async (appId) => {
+  if (!pendingFiles.value.length) return 0
+  let ok = 0
+  for (const p of pendingFiles.value) {
+    try { await uploadAttachment(appId, p.fileType, p.file); ok++ } catch (e) { /* 单个失败不阻断 */ }
+  }
+  pendingFiles.value = []
+  return ok
 }
 const formatSize = (bytes) => {
   if (!bytes) return '-'
@@ -199,8 +233,15 @@ const handleSubmit = async () => {
   form.applyPeriod = form.applyDays + '天'
   submitting.value = true
   try {
-    await submitApplication(form)
-    ElMessage.success('提交成功，等待审批')
+    const res = await submitApplication(form)
+    const appId = res.data || form.id
+    // 上传待传附件
+    if (appId && pendingFiles.value.length) {
+      const ok = await uploadPendingFiles(appId)
+      ElMessage.success(`提交成功，等待审批（已上传${ok}个附件）`)
+    } else {
+      ElMessage.success('提交成功，等待审批')
+    }
     router.push('/application')
   } finally {
     submitting.value = false
@@ -211,13 +252,19 @@ const handleDraft = async () => {
   form.testType = JSON.stringify(testTypeArr.value)
   form.deviceType = deviceTypeArr.value.join(',')
   form.applyPeriod = form.applyDays + '天'
-  await saveDraft(form)
-  ElMessage.success('草稿已保存，可继续上传附件')
-  // 重新加载以拿到草稿id，便于上传附件
-  if (!form.id && route.query.id) form.id = route.query.id
-  // 若是新建草稿，需查询最新草稿id（保存接口未返回id时返回列表页）
-  if (!form.id) { router.push('/application'); return }
-  loadAttachments()
+  const res = await saveDraft(form)
+  const appId = res.data || form.id
+  // 上传待传附件
+  let msg = '草稿已保存'
+  if (appId && pendingFiles.value.length) {
+    const ok = await uploadPendingFiles(appId)
+    msg = `草稿已保存（已上传${ok}个附件）`
+  }
+  ElMessage.success(msg)
+  // 设置id便于继续编辑/再传附件
+  if (appId && !form.id) form.id = appId
+  if (form.id) loadAttachments()
+  else router.push('/application')
 }
 
 // Word导入

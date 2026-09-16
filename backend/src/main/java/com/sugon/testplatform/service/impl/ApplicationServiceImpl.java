@@ -138,7 +138,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
-    public void saveDraft(ApplicationSubmitRequest req) {
+    public Long saveDraft(ApplicationSubmitRequest req) {
         Long userId = UserContext.getUserId();
         TestApplication app;
         if (req.getId() != null) {
@@ -165,6 +165,7 @@ public class ApplicationServiceImpl implements ApplicationService {
             app.setCurrentNode(NODE_PRESALES);
             applicationMapper.insert(app);
         }
+        return app.getId();
     }
 
     @Override
