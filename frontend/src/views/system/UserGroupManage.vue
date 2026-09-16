@@ -8,6 +8,12 @@
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="groupCode" label="组编码" width="160" />
         <el-table-column prop="groupName" label="组名称" width="180" />
+        <el-table-column label="组类型" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.groupType==='PRESALES_REGION'" type="warning" size="small">售前区域组</el-tag>
+            <el-tag v-else type="info" size="small">普通组</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="leaderName" label="负责人" width="120">
           <template #default="{ row }">
             <el-tag v-if="row.leaderName" type="success" size="small">{{ row.leaderName }}</el-tag>
@@ -31,6 +37,13 @@
       <el-form :model="form" label-width="80px">
         <el-form-item label="组编码"><el-input v-model="form.groupCode" :disabled="!!form.id" placeholder="如 SALES_GROUP" /></el-form-item>
         <el-form-item label="组名称"><el-input v-model="form.groupName" /></el-form-item>
+        <el-form-item label="组类型">
+          <el-select v-model="form.groupType" placeholder="普通组" style="width:100%">
+            <el-option label="普通组" value="GENERAL" />
+            <el-option label="售前区域组" value="PRESALES_REGION" />
+          </el-select>
+          <div v-if="form.groupType==='PRESALES_REGION'" style="color:#e6a23c;font-size:12px;margin-top:4px">售前区域组：将该区域售前加为组员，负责人即组长，组长可查看本组所有售前的测试项目</div>
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
       <template #footer>
@@ -92,7 +105,7 @@ const loadUsers = async () => {
   allUserOptions.value = res.data.map(u => ({ id: u.id, realName: u.realName }))
 }
 
-const openForm = (row) => { form.value = row ? { ...row } : {}; formVisible.value = true }
+const openForm = (row) => { form.value = row ? { ...row } : { groupType: 'GENERAL' }; formVisible.value = true }
 const handleSave = async () => { await saveGroup(form.value); ElMessage.success('保存成功'); formVisible.value = false; load() }
 const handleDelete = async (row) => {
   await ElMessageBox.confirm(`确认删除用户组【${row.groupName}】？`, '警告', { type: 'warning' })

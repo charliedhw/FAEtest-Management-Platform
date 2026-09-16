@@ -16,6 +16,7 @@ import com.sugon.testplatform.mapper.SysUserGroupMapper;
 import com.sugon.testplatform.mapper.SysUserMapper;
 import com.sugon.testplatform.mapper.TestApplicationMapper;
 import com.sugon.testplatform.mapper.TestProjectMapper;
+import com.sugon.testplatform.security.PresalesScope;
 import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.ApplicationService;
 import com.sugon.testplatform.service.DictService;
@@ -46,6 +47,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final SysUserGroupMapper userGroupMapper;
     private final MailService mailService;
     private final UserService userService;
+    private final PresalesScope presalesScope;
 
     // 节点常量
     public static final String NODE_PRESALES = "PRESALES_EVAL";     // 售前评估(已废弃，保留兼容)
@@ -453,8 +455,18 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (seeAll) return;
 
         if (roles.contains("PRESALES")) {
-            qw.and(w -> w.eq(TestApplication::getApplicantId, uid)
-                    .or().eq(TestApplication::getPresalesId, uid));
+            // 售前区域组组长：可见本组全体组员提交的/作为方案售前的申请
+            List<Long> memberIds = presalesScope.memberIdsOfLedGroups(uid);
+            if (!memberIds.isEmpty()) {
+                qw.and(w -> {
+                    w.eq(TestApplication::getApplicantId, uid).or().eq(TestApplication::getPresalesId, uid);
+                    w.or().in(TestApplication::getApplicantId, memberIds);
+                    w.or().in(TestApplication::getPresalesId, memberIds);
+                });
+            } else {
+                qw.and(w -> w.eq(TestApplication::getApplicantId, uid)
+                        .or().eq(TestApplication::getPresalesId, uid));
+            }
         } else if (roles.contains("SALES")) {
             qw.and(w -> w.eq(TestApplication::getSalesId, uid)
                     .or().eq(TestApplication::getApplicantId, uid));
@@ -476,6 +488,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!seeAll) {
             boolean visible = uid.equals(app.getApplicantId())
                     || uid.equals(app.getPresalesId()) || uid.equals(app.getSalesId());
+            // 售前区域组组长可见本组组员的申请
+            if (!visible) {
+                List<Long> memberIds = presalesScope.memberIdsOfLedGroups(uid);
+                if (!memberIds.isEmpty() && (memberIds.contains(app.getApplicantId()) || memberIds.contains(app.getPresalesId()))) {
+                    visible = true;
+                }
+            }
             if (!visible) throw new BizException("无权查看该申请");
         }
         return app;

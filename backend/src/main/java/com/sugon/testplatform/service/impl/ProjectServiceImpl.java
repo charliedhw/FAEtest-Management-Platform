@@ -13,6 +13,7 @@ import com.sugon.testplatform.mapper.TestProgressMapper;
 import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.mapper.TestReportMapper;
 import com.sugon.testplatform.mapper.SysUserMapper;
+import com.sugon.testplatform.security.PresalesScope;
 import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.ProjectService;
 import com.sugon.testplatform.service.ReportService;
@@ -38,11 +39,12 @@ public class ProjectServiceImpl implements ProjectService {
     private final ReportService reportService;
     private final ResourceService resourceService;
     private final SysUserMapper sysUserMapper;
+    private final PresalesScope presalesScope;
 
     public ProjectServiceImpl(TestProjectMapper projectMapper, TestProgressMapper progressMapper,
                               TestReportMapper reportMapper, TestApplicationMapper applicationMapper,
                               ReportService reportService, @Lazy ResourceService resourceService,
-                              SysUserMapper sysUserMapper) {
+                              SysUserMapper sysUserMapper, PresalesScope presalesScope) {
         this.projectMapper = projectMapper;
         this.progressMapper = progressMapper;
         this.reportMapper = reportMapper;
@@ -50,6 +52,7 @@ public class ProjectServiceImpl implements ProjectService {
         this.reportService = reportService;
         this.resourceService = resourceService;
         this.sysUserMapper = sysUserMapper;
+        this.presalesScope = presalesScope;
     }
 
     @Override
@@ -82,9 +85,15 @@ public class ProjectServiceImpl implements ProjectService {
                 || roles.contains("FAE_LEADER");
         if (seeAll) return;
 
+        // 售前区域组组长：可见本组组员关联的项目
+        java.util.List<Long> ledMemberIds = roles.contains("PRESALES") ? presalesScope.memberIdsOfLedGroups(uid) : java.util.List.of();
         qw.and(w -> {
             if (roles.contains("PRESALES")) {
                 w.eq(TestProject::getPresalesId, uid).or();
+                if (!ledMemberIds.isEmpty()) {
+                    w.in(TestProject::getPresalesId, ledMemberIds).or();
+                    w.in(TestProject::getCreateBy, ledMemberIds).or();
+                }
             }
             if (roles.contains("SALES")) {
                 w.eq(TestProject::getSalesId, uid).or();
@@ -252,7 +261,16 @@ public class ProjectServiceImpl implements ProjectService {
         Long uid = UserContext.requireUserId();
         boolean visible = uid.equals(p.getCreateBy()) || uid.equals(p.getSalesId())
                 || uid.equals(p.getPresalesId()) || isAssignedTester(p, uid);
+        if (!visible && isLedMemberProject(p, uid)) visible = true;
         if (!visible) throw new BizException("无权查看该项目");
+    }
+
+    /** 售前区域组组长可见本组组员关联的项目 */
+    private boolean isLedMemberProject(TestProject p, Long uid) {
+        if (uid == null) return false;
+        java.util.List<Long> memberIds = presalesScope.memberIdsOfLedGroups(uid);
+        if (memberIds.isEmpty()) return false;
+        return memberIds.contains(p.getPresalesId()) || memberIds.contains(p.getCreateBy());
     }
 
     /**
@@ -265,8 +283,10 @@ public class ProjectServiceImpl implements ProjectService {
         if (com.sugon.testplatform.security.DataScopeHelper.seeAll()) return true;
         Long uid = UserContext.getUserId();
         if (uid == null) return false;
-        return uid.equals(p.getCreateBy()) || uid.equals(p.getSalesId())
+        boolean visible = uid.equals(p.getCreateBy()) || uid.equals(p.getSalesId())
                 || uid.equals(p.getPresalesId()) || isAssignedTester(p, uid);
+        if (!visible) visible = isLedMemberProject(p, uid);
+        return visible;
     }
 
     /**
