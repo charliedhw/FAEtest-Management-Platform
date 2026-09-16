@@ -5,6 +5,7 @@ import com.sugon.testplatform.common.Result;
 import com.sugon.testplatform.dto.ApplicationSubmitRequest;
 import com.sugon.testplatform.dto.ApprovalRequest;
 import com.sugon.testplatform.dto.AssignRequest;
+import com.sugon.testplatform.dto.ScheduleRequest;
 import com.sugon.testplatform.dto.WordImportResult;
 import com.sugon.testplatform.entity.TestApplication;
 import com.sugon.testplatform.security.UserContext;
@@ -46,6 +47,12 @@ public class ApplicationController {
     @PostMapping("/assign")
     public Result<Void> assign(@RequestBody AssignRequest req) {
         applicationService.assign(req);
+        return Result.ok();
+    }
+
+    @PostMapping("/schedule")
+    public Result<Void> schedule(@RequestBody ScheduleRequest req) {
+        applicationService.schedule(req);
         return Result.ok();
     }
 

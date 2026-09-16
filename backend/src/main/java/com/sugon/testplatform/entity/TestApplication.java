@@ -36,6 +36,12 @@ public class TestApplication {
     private Long presalesId;
     private String presalesName;
     private String currentNode;
+    private java.time.LocalDate scheduleStartTime;
+    private java.time.LocalDate scheduleEndTime;
+    private String scheduleRemark;
+    private Long scheduleBy;
+    private String scheduleByName;
+    private LocalDateTime scheduleTime;
     private String status;
     private String rejectReason;
     private LocalDateTime createTime;

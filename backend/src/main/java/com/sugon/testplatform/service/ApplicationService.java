@@ -4,6 +4,7 @@ import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.dto.ApplicationSubmitRequest;
 import com.sugon.testplatform.dto.ApprovalRequest;
 import com.sugon.testplatform.dto.AssignRequest;
+import com.sugon.testplatform.dto.ScheduleRequest;
 import com.sugon.testplatform.entity.TestApplication;
 
 public interface ApplicationService {
@@ -11,6 +12,8 @@ public interface ApplicationService {
     void saveDraft(ApplicationSubmitRequest req);
     void approve(ApprovalRequest req);
     void assign(AssignRequest req);
+    // 项目排期：排期员/管理员对处于待分配节点的申请设置计划测试时间
+    void schedule(ScheduleRequest req);
     void withdraw(Long appId);
     // 删除申请单：申请人可删除自己 草稿/已关闭(撤回)/已驳回 的申请
     void deleteApplication(Long appId);

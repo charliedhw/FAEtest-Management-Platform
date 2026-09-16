@@ -15,6 +15,15 @@
           <template #default="{ row }"><el-tag type="warning">{{ nodeMap[row.currentNode] || row.currentNode }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="applyDays" label="申请天数" width="90" />
+        <el-table-column label="排期" width="170">
+          <template #default="{ row }">
+            <template v-if="row.scheduleStartTime">
+              <el-tag type="success" size="small">{{ row.scheduleStartTime }} ~ {{ row.scheduleEndTime }}</el-tag>
+            </template>
+            <el-tag v-else-if="row.currentNode === 'ASSIGN'" type="info" size="small">未排期</el-tag>
+            <span v-else style="color:#c0c4cc">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="申请时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
         </el-table-column>
@@ -22,6 +31,7 @@
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openApproval(row, 'APPROVE')">通过</el-button>
             <el-button link type="danger" size="small" @click="openApproval(row, 'REJECT')">驳回</el-button>
+            <el-button v-if="row.currentNode === 'ASSIGN' && canSchedule" link type="warning" size="small" @click="openSchedule(row)">排期</el-button>
             <el-button v-if="row.currentNode === 'ASSIGN'" link type="success" size="small" @click="openAssign(row)">分配</el-button>
           </template>
         </el-table-column>
@@ -67,6 +77,23 @@
       </template>
     </el-dialog>
 
+    <!-- 排期对话框 -->
+    <el-dialog v-model="scheduleVisible" title="项目排期" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="项目">{{ currentRow.projectName }}</el-form-item>
+        <el-form-item label="计划测试时间" required>
+          <el-date-picker v-model="scheduleRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="排期说明">
+          <el-input v-model="scheduleForm.scheduleRemark" type="textarea" :rows="2" placeholder="如：等508资源释放 / 等测试人员到位" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scheduleVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSchedule">确定排期</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 项目申请详情抽屉 -->
     <el-drawer v-model="detailVisible" title="项目申请详情" size="620px">
       <el-descriptions :column="1" border>
@@ -86,6 +113,8 @@
         <el-descriptions-item label="软件及应用">{{ detail.softwareApp }}</el-descriptions-item>
         <el-descriptions-item label="申请天数">{{ detail.applyDays }} 天</el-descriptions-item>
         <el-descriptions-item label="期望资源类型">{{ detail.expectResourceType }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.scheduleStartTime" label="排期时间">{{ detail.scheduleStartTime }} ~ {{ detail.scheduleEndTime }}（{{ detail.scheduleByName }}）</el-descriptions-item>
+        <el-descriptions-item v-if="detail.scheduleRemark" label="排期说明">{{ detail.scheduleRemark }}</el-descriptions-item>
         <el-descriptions-item label="申请时间">{{ detail.createTime }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.rejectReason" label="驳回原因"><span style="color:#f56c6c">{{ detail.rejectReason }}</span></el-descriptions-item>
       </el-descriptions>
@@ -94,9 +123,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getTodoList, approveApplication, assignApplication, getAllDict, listUserByRole } from '../../api'
+import { getTodoList, approveApplication, assignApplication, scheduleApplication, getAllDict, listUserByRole } from '../../api'
+import { useUserStore } from '../../store/user'
 import { formatDateTime, formatTestType } from '../../utils/format'
 
 const loading = ref(false)
@@ -118,6 +148,13 @@ const approvalForm = ref({ appId: null, action: '', opinion: '', rejectReason: '
 const assignVisible = ref(false)
 const assignForm = ref({ appId: null, testerIds: '', resourceType: '' })
 const assignTesterArr = ref([])
+
+// 排期
+const userStore = useUserStore()
+const canSchedule = computed(() => userStore.hasRole('SCHEDULER') || userStore.hasRole('ADMIN'))
+const scheduleVisible = ref(false)
+const scheduleRange = ref([])
+const scheduleForm = ref({ appId: null, scheduleStartTime: '', scheduleEndTime: '', scheduleRemark: '' })
 
 const nodeMap = { PRESALES_EVAL: '售前评估', APPROVAL: '测试审批组审批', LEADER_APPROVAL: '领导审批', ASSIGN: 'daihw分配任务' }
 
@@ -158,6 +195,26 @@ const handleAssign = async () => {
   await assignApplication(assignForm.value)
   ElMessage.success('分配成功')
   assignVisible.value = false
+  load()
+}
+
+const openSchedule = (row) => {
+  currentRow.value = row
+  scheduleForm.value = { appId: row.id, scheduleStartTime: row.scheduleStartTime || '', scheduleEndTime: row.scheduleEndTime || '', scheduleRemark: row.scheduleRemark || '' }
+  scheduleRange.value = row.scheduleStartTime ? [row.scheduleStartTime, row.scheduleEndTime] : []
+  scheduleVisible.value = true
+}
+
+const handleSchedule = async () => {
+  if (!scheduleRange.value || scheduleRange.value.length !== 2) {
+    ElMessage.warning('请选择排期起止时间')
+    return
+  }
+  scheduleForm.value.scheduleStartTime = scheduleRange.value[0]
+  scheduleForm.value.scheduleEndTime = scheduleRange.value[1]
+  await scheduleApplication(scheduleForm.value)
+  ElMessage.success('排期成功')
+  scheduleVisible.value = false
   load()
 }
 

@@ -36,6 +36,7 @@ export const submitApplication = (data) => request.post('/application/submit', d
 export const saveDraft = (data) => request.post('/application/draft', data)
 export const approveApplication = (data) => request.post('/application/approve', data)
 export const assignApplication = (data) => request.post('/application/assign', data)
+export const scheduleApplication = (data) => request.post('/application/schedule', data)
 export const withdrawApplication = (id) => request.post(`/application/withdraw/${id}`)
 export const deleteApplication = (id) => request.delete(`/application/${id}`)
 export const getApplicationPage = (params) => request.get('/application/page', { params })

@@ -7,6 +7,7 @@ import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.dto.ApplicationSubmitRequest;
 import com.sugon.testplatform.dto.ApprovalRequest;
 import com.sugon.testplatform.dto.AssignRequest;
+import com.sugon.testplatform.dto.ScheduleRequest;
 import com.sugon.testplatform.entity.ApprovalRecord;
 import com.sugon.testplatform.entity.TestApplication;
 import com.sugon.testplatform.entity.TestProject;
@@ -239,6 +240,44 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     @Transactional
+    public void schedule(ScheduleRequest req) {
+        TestApplication app = applicationMapper.selectById(req.getAppId());
+        if (app == null) throw new BizException("申请单不存在");
+        // 只有待分配节点才能排期（审批通过后、分配人员前）
+        if (!NODE_ASSIGN.equals(app.getCurrentNode())) {
+            throw new BizException("当前申请不在待分配节点，不能排期");
+        }
+        // 排期权限：排期员(SCHEDULER) 或 管理员
+        if (!UserContext.getRoles().contains("SCHEDULER") && !UserContext.getRoles().contains("ADMIN")) {
+            throw new BizException("只有排期员或管理员才能进行项目排期");
+        }
+        if (req.getScheduleStartTime() == null || req.getScheduleEndTime() == null) {
+            throw new BizException("请选择排期起止时间");
+        }
+        if (req.getScheduleEndTime().isBefore(req.getScheduleStartTime())) {
+            throw new BizException("排期结束时间不能早于开始时间");
+        }
+        app.setScheduleStartTime(req.getScheduleStartTime());
+        app.setScheduleEndTime(req.getScheduleEndTime());
+        app.setScheduleRemark(req.getScheduleRemark());
+        app.setScheduleBy(UserContext.getUserId());
+        app.setScheduleByName(UserContext.getRealName());
+        app.setScheduleTime(LocalDateTime.now());
+        applicationMapper.updateById(app);
+        record(app.getId(), NODE_ASSIGN, UserContext.getUserId(), UserContext.getRealName(), "SCHEDULE",
+                "排期:" + req.getScheduleStartTime() + " ~ " + req.getScheduleEndTime()
+                        + (StringUtils.hasText(req.getScheduleRemark()) ? "，说明:" + req.getScheduleRemark() : ""));
+        // 通知FAE组负责人排期已确定，可安排分配
+        Long assigneeId = getFaeGroupLeaderId();
+        if (assigneeId != null) {
+            notifyService.send(assigneeId, "测试项目已排期",
+                    "测试申请【" + app.getProjectName() + "】已排期 " + req.getScheduleStartTime() + " ~ " + req.getScheduleEndTime() + "，请安排分配测试人员。",
+                    "APPROVAL", app.getId(), "/approval");
+        }
+    }
+
+    @Override
+    @Transactional
     public void assign(AssignRequest req) {
         TestApplication app = applicationMapper.selectById(req.getAppId());
         if (app == null) throw new BizException("申请单不存在");
@@ -264,6 +303,9 @@ public class ApplicationServiceImpl implements ApplicationService {
         project.setTesterNames(resolveTesterNames(req.getTesterIds()));
         project.setStatus("NOT_START");
         project.setApplyTime(app.getCreateTime());
+        // 排期时间带入项目作为计划测试起止时间
+        project.setTestStartTime(app.getScheduleStartTime());
+        project.setTestEndTime(app.getScheduleEndTime());
         project.setCreateBy(userId);
         projectMapper.insert(project);
 
