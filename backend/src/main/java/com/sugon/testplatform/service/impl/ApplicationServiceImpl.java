@@ -241,6 +241,21 @@ public class ApplicationServiceImpl implements ApplicationService {
                     "测试申请【" + app.getProjectName() + "】已审批通过，请分配测试资源与人员。",
                     "APPROVAL", app.getId(), "/approval");
         }
+        // 同时通知全体排期员(SCHEDULER，含张俊聪)去排期；与分配人可能重复，排期员若不是分配人则单独提醒
+        notifyAndMailSchedulers(assigneeId, "测试项目待排期",
+                "测试申请【" + app.getProjectName() + "】已审批通过，请及时进行项目排期。",
+                "/approval", "APPROVAL", app.getId());
+    }
+
+    /** 通知全体排期员(SCHEDULER角色)发站内信+邮件；excludeUserId 用于跳过已单独通知过的人(如分配人也是排期员时避免重复) */
+    private void notifyAndMailSchedulers(Long excludeUserId, String title, String content, String jumpUrl, String bizType, Long bizId) {
+        try {
+            for (com.sugon.testplatform.entity.SysUser u : userService.listByRole("SCHEDULER")) {
+                if (excludeUserId != null && excludeUserId.equals(u.getId())) continue;
+                notifyService.send(u.getId(), title, content, bizType, bizId, jumpUrl);
+                mailService.sendNotify(u.getEmail(), u.getRealName(), title, content, jumpUrl, bizType, bizId);
+            }
+        } catch (Exception e) { /* 通知失败不影响流程 */ }
     }
 
     /** 给单个用户发流程邮件（按其sys_user.email） */
