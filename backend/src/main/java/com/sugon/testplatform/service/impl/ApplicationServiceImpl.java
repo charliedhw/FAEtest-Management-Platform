@@ -397,13 +397,19 @@ public class ApplicationServiceImpl implements ApplicationService {
                 }
             }
         }
-        // 通知申请人 -> 跳转项目详情
+        // 通知申请人 -> 跳转项目详情（站内信发给申请人）
         notifyService.send(app.getApplicantId(), "测试申请已分配",
                 "您的测试申请【" + app.getProjectName() + "】已分配资源与测试人员，项目编号:" + project.getProjectNo(),
                 "APPROVAL", project.getId(), "/project/" + project.getId());
-        mailToUser(app.getApplicantId(), "测试申请已分配",
-                "您的测试申请【" + app.getProjectName() + "】已分配资源与测试人员，项目编号:" + project.getProjectNo(),
-                "/project/" + project.getId(), "APPROVAL", project.getId());
+        // 邮件发给项目对应的售前与销售（而非申请人，避免admin代建时邮件发给admin）
+        java.util.Set<Long> mailTargets = new java.util.LinkedHashSet<>();
+        if (app.getPresalesId() != null) mailTargets.add(app.getPresalesId());
+        if (app.getSalesId() != null) mailTargets.add(app.getSalesId());
+        for (Long targetId : mailTargets) {
+            mailToUser(targetId, "测试申请已分配",
+                    "项目【" + app.getProjectName() + "】已分配资源与测试人员，项目编号:" + project.getProjectNo(),
+                    "/project/" + project.getId(), "APPROVAL", project.getId());
+        }
     }
 
     @Override
