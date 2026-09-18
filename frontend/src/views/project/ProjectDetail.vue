@@ -218,6 +218,22 @@
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
+            <el-form-item label="项目销售">
+              <el-select v-model="editForm.salesId" style="width:100%" filterable clearable placeholder="请选择销售" @change="onEditSalesChange">
+                <el-option v-for="u in salesList" :key="u.id" :label="u.realName" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="方案售前">
+              <el-select v-model="editForm.presalesId" style="width:100%" filterable clearable placeholder="请选择售前" @change="onEditPresalesChange">
+                <el-option v-for="u in presalesList" :key="u.id" :label="u.realName" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
             <el-form-item label="测试人员">
               <el-select v-model="editTesterIdArr" multiple style="width:100%" placeholder="从FAE测试组选择" @change="onEditTesterChange">
                 <el-option v-for="u in faeTesters" :key="u.id" :label="u.realName" :value="String(u.id)" />
@@ -290,6 +306,8 @@ const editDeviceTypeArr = ref([])
 const editTesterIdArr = ref([])
 const editTestTypeArr = ref([])
 const faeTesters = ref([])
+const salesList = ref([])
+const presalesList = ref([])
 // 阶段任务
 const stageList = ref([])
 const progressData = ref({ total: 0, done: 0, inProgress: 0, notStart: 0, percent: 0 })
@@ -374,6 +392,16 @@ const openEdit = () => {
   // 回填测试类型（存储为顿号分隔纯文本，如 AI、CPU）
   editTestTypeArr.value = String(project.value.testType || '').split(/[、,，\/]/).map(s => s.trim()).filter(Boolean)
   editVisible.value = true
+}
+
+// 销售/售前下拉变更：同步姓名
+const onEditSalesChange = (id) => {
+  const u = salesList.value.find(x => x.id === id)
+  editForm.value.salesName = u ? u.realName : ''
+}
+const onEditPresalesChange = (id) => {
+  const u = presalesList.value.find(x => x.id === id)
+  editForm.value.presalesName = u ? u.realName : ''
 }
 
 // 测试人员下拉变更：同步 testerIds 与 testerNames
@@ -484,6 +512,15 @@ onMounted(async () => {
     const tr = await listUserByRole('TESTER')
     faeTesters.value = tr.data || []
   } catch { faeTesters.value = [] }
+  // 加载销售/售前人员供编辑下拉
+  try {
+    const sr = await listUserByRole('SALES')
+    salesList.value = sr.data || []
+  } catch { salesList.value = [] }
+  try {
+    const pr = await listUserByRole('PRESALES')
+    presalesList.value = pr.data || []
+  } catch { presalesList.value = [] }
 })
 </script>
 

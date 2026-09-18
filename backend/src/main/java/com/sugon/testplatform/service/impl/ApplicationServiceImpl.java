@@ -125,7 +125,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         notifyService.sendToRole("APPROVER", "新的测试申请待审批",
                 "售前【" + app.getApplicantName() + "】提交了测试申请【" + app.getProjectName() + "】，请及时审批。",
                 "APPROVAL", app.getId(), "/approval");
-        mailToRole("APPROVER", "新的测试申请待审批",
+        // 邮件统一发送到审批公共邮箱(不逐个发审批组全员)
+        mailToAddr("test_sp@sugon.com", "新的测试申请待审批",
                 "售前【" + app.getApplicantName() + "】提交了测试申请【" + app.getProjectName() + "】，请及时审批。",
                 "/approval", "APPROVAL", app.getId());
         return app.getId();
@@ -264,6 +265,16 @@ public class ApplicationServiceImpl implements ApplicationService {
             if (userId == null) return;
             com.sugon.testplatform.entity.SysUser u = userMapper.selectById(userId);
             if (u != null) mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+        } catch (Exception e) { /* 邮件失败不影响流程 */ }
+    }
+
+    /** 给指定邮箱地址发流程邮件（地址从 sys_config 读取，key=mail.approve.to，默认 test_sp@sugon.com） */
+    private void mailToAddr(String defaultAddr, String title, String action, String jumpUrl, String bizType, Long bizId) {
+        try {
+            String addr = dictService.getConfig("mail.approve.to", defaultAddr);
+            if (StringUtils.hasText(addr)) {
+                mailService.sendNotify(addr.trim(), null, title, action, jumpUrl, bizType, bizId);
+            }
         } catch (Exception e) { /* 邮件失败不影响流程 */ }
     }
 
