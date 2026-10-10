@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,9 +83,10 @@ public class StatsServiceImpl implements StatsService {
         for (TestProject p : projects) {
             if (p.getTestType() == null) continue;
             String type = p.getTestType().replace("[", "").replace("]", "").replace("\"", "");
-            for (String t : type.split(",")) {
+            java.util.Set<String> projectTypes = new HashSet<>();
+            for (String t : type.split("[,，、/]")) {
                 String trimmed = t.trim();
-                if (!trimmed.isEmpty()) {
+                if (!trimmed.isEmpty() && projectTypes.add(trimmed)) {
                     counter.merge(trimmed, 1L, Long::sum);
                 }
             }
