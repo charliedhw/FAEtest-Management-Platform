@@ -12,4 +12,5 @@ public interface ProgressService {
     void delete(Long id);
     List<TestProgress> listByProject(Long projectId);
     PageResult<Map<String, Object>> projectSummary(int pageNum, int pageSize, String keyword, String date);
+    PageResult<Map<String, Object>> projectDaily(int pageNum, int pageSize, String keyword, java.time.LocalDate date);
 }

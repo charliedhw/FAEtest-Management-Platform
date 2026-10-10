@@ -2,6 +2,7 @@ package com.sugon.testplatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.sugon.testplatform.common.BizException;
+import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.dto.ProgressRequest;
 import com.sugon.testplatform.entity.TestProgress;
 import com.sugon.testplatform.entity.TestProject;
@@ -17,6 +18,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ProgressServiceImpl implements ProgressService {
@@ -96,6 +102,58 @@ public class ProgressServiceImpl implements ProgressService {
     }
 
     @Override
+    public PageResult<Map<String, Object>> projectDaily(int pageNum, int pageSize, String keyword, LocalDate date) {
+        if (pageNum < 1 || pageSize < 1 || pageSize > 200) {
+            throw new BizException("分页参数无效，每页条数应为1至200");
+        }
+        if (date == null) throw new BizException("请选择日报日期");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("status", "IN_PROGRESS");
+        params.put("keyword", keyword);
+        // 复用项目清单的数据范围（包含售前区域组），只查询当前页项目的日报。
+        PageResult<TestProject> page = projectService.page(pageNum, pageSize, params);
+        if (page.getRecords().isEmpty()) {
+            return new PageResult<>(page.getTotal(), Collections.emptyList());
+        }
+        List<Long> ids = page.getRecords().stream().map(TestProject::getId).collect(Collectors.toList());
+        List<TestProgress> progress = progressMapper.selectList(new LambdaQueryWrapper<TestProgress>()
+                .in(TestProgress::getProjectId, ids)
+                .eq(TestProgress::getProgressDate, date)
+                .orderByDesc(TestProgress::getCreateTime)
+                .orderByDesc(TestProgress::getId));
+        Map<Long, List<TestProgress>> grouped = progress.stream()
+                .collect(Collectors.groupingBy(TestProgress::getProjectId));
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (TestProject project : page.getRecords()) {
+            List<TestProgress> daily = grouped.getOrDefault(project.getId(), Collections.emptyList());
+            Map<String, Object> row = summaryRow(project, daily);
+            row.put("dailyProgress", daily);
+            records.add(row);
+        }
+        return new PageResult<>(page.getTotal(), records);
+    }
+
+    private Map<String, Object> summaryRow(TestProject project, List<TestProgress> progress) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("projectId", project.getId());
+        row.put("projectNo", project.getProjectNo());
+        row.put("projectName", project.getProjectName());
+        row.put("customerName", project.getCustomerName());
+        row.put("status", project.getStatus());
+        row.put("testerNames", project.getTesterNames());
+        row.put("testStartTime", project.getTestStartTime());
+        row.put("testEndTime", project.getTestEndTime());
+        if (!progress.isEmpty()) {
+            TestProgress latest = progress.get(0);
+            row.put("latestProgressDate", latest.getProgressDate());
+            row.put("latestProgressContent", latest.getContent());
+            row.put("latestProgressBy", latest.getCreateByName());
+        }
+        row.put("progressCount", progress.size());
+        return row;
+    }
+
+    @Override
     public com.sugon.testplatform.common.PageResult<java.util.Map<String, Object>> projectSummary(int pageNum, int pageSize, String keyword, String date) {
         // 构建进展查询条件
         LambdaQueryWrapper<TestProgress> wrapper = new LambdaQueryWrapper<>();
@@ -133,25 +191,7 @@ public class ProgressServiceImpl implements ProgressService {
             List<TestProgress> projProgress = grouped.get(proj.getId());
             if (projProgress == null || projProgress.isEmpty()) continue;
 
-            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
-            map.put("projectId", proj.getId());
-            map.put("projectNo", proj.getProjectNo());
-            map.put("projectName", proj.getProjectName());
-            map.put("customerName", proj.getCustomerName());
-            map.put("status", proj.getStatus());
-            map.put("testerNames", proj.getTesterNames());
-            map.put("testStartTime", proj.getTestStartTime());
-            map.put("testEndTime", proj.getTestEndTime());
-
-            // 最新进展
-            TestProgress latest = projProgress.get(0);
-            map.put("latestProgressDate", latest.getProgressDate());
-            map.put("latestProgressContent", latest.getContent());
-            map.put("latestProgressBy", latest.getCreateByName());
-            // 当日/全部进展数
-            map.put("progressCount", projProgress.size());
-
-            allList.add(map);
+            allList.add(summaryRow(proj, projProgress));
         }
 
         // 手动分页

@@ -6,8 +6,10 @@ import com.sugon.testplatform.dto.ProgressRequest;
 import com.sugon.testplatform.entity.TestProgress;
 import com.sugon.testplatform.service.ProgressService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -16,6 +18,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ProgressController {
     private final ProgressService progressService;
+
+    @GetMapping("/project-daily")
+    public Result<PageResult<Map<String, Object>>> projectDaily(@RequestParam(defaultValue = "1") int pageNum,
+                                                               @RequestParam(defaultValue = "20") int pageSize,
+                                                               @RequestParam(required = false) String keyword,
+                                                               @RequestParam(required = false)
+                                                               @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return Result.ok(progressService.projectDaily(pageNum, pageSize, keyword, date == null ? LocalDate.now() : date));
+    }
 
     @GetMapping("/summary")
     public Result<PageResult<Map<String, Object>>> summary(@RequestParam(defaultValue = "1") int pageNum,

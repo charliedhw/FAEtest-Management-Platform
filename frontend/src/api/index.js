@@ -81,6 +81,7 @@ export const listProgress = (projectId) => request.get(`/progress/list/${project
 
 // 日报汇总
 export const getProgressSummary = (params) => request.get('/progress/summary', { params })
+export const getProjectDaily = (params) => request.get('/progress/project-daily', { params })
 
 // 周报
 export const saveWeeklyReport = (data) => request.post('/weeklyReport/save', data)
