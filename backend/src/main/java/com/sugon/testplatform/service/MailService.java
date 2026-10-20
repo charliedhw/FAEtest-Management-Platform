@@ -9,4 +9,6 @@ public interface MailService {
     String sendTest(String toAddr);
     // 异步发送流程通知邮件，bizId关联业务，jumpUrl为平台内路径(如 /approval)
     void sendNotify(String toAddr, String toName, String title, String action, String jumpUrl, String bizType, Long bizId);
+    // 定时重试24小时内发送失败的邮件（@Scheduled 定时任务入口）
+    void retryFailed();
 }

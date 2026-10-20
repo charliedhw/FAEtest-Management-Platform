@@ -18,5 +18,7 @@ public class MailLog {
     private Long bizId;
     private Integer success;
     private String error;
+    /** 失败重试次数 */
+    private Integer retryCount;
     private LocalDateTime createTime;
 }

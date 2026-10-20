@@ -60,6 +60,11 @@ public class ReportServiceImpl implements ReportService {
         }
     }
 
+    private MinioClient requireClient() {
+        if (minioClient == null) throw new BizException("文件存储服务不可用，请联系管理员");
+        return minioClient;
+    }
+
     @Override
     public TestReport upload(Long projectId, MultipartFile file) {
         // 只有被分配的FAE测试人员及管理员才能上传报告
@@ -69,7 +74,7 @@ public class ReportServiceImpl implements ReportService {
         try {
             String originalName = file.getOriginalFilename();
             String key = projectId + "/" + UUID.randomUUID() + "_" + originalName;
-            minioClient.putObject(PutObjectArgs.builder()
+            requireClient().putObject(PutObjectArgs.builder()
                     .bucket(bucket)
                     .object(key)
                     .stream(file.getInputStream(), file.getSize(), -1)
@@ -128,7 +133,7 @@ public class ReportServiceImpl implements ReportService {
         if (!projectService.canView(report.getProjectId())) {
             throw new BizException("无权下载该报告");
         }
-        try (InputStream in = minioClient.getObject(GetObjectArgs.builder()
+        try (InputStream in = requireClient().getObject(GetObjectArgs.builder()
                 .bucket(bucket).object(report.getFileKey()).build());
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             in.transferTo(out);
@@ -141,5 +146,20 @@ public class ReportServiceImpl implements ReportService {
     @Override
     public TestReport getById(Long id) {
         return reportMapper.selectById(id);
+    }
+
+    @Override
+    public void deleteByProject(Long projectId) {
+        List<TestReport> reports = reportMapper.selectList(
+                new LambdaQueryWrapper<TestReport>().eq(TestReport::getProjectId, projectId));
+        for (TestReport r : reports) {
+            try {
+                minioClient.removeObject(RemoveObjectArgs.builder()
+                        .bucket(bucket).object(r.getFileKey()).build());
+            } catch (Exception e) {
+                log.warn("级联删除MinIO对象失败 key={}: {}", r.getFileKey(), e.getMessage());
+            }
+            reportMapper.deleteById(r.getId());
+        }
     }
 }

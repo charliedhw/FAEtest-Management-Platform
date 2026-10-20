@@ -8,6 +8,7 @@ import com.sugon.testplatform.mapper.SysUserGroupMapper;
 import com.sugon.testplatform.mapper.SysUserGroupRelMapper;
 import com.sugon.testplatform.mapper.SysUserMapper;
 import com.sugon.testplatform.entity.SysUser;
+import com.sugon.testplatform.security.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -31,10 +32,17 @@ public class UserGroupController {
 
     @PostMapping("/save")
     public Result<Void> save(@RequestBody SysUserGroup group) {
+        UserContext.requireRole("ADMIN");
         if (group.getId() == null) {
             groupMapper.insert(group);
         } else {
             groupMapper.updateById(group);
+            // updateById 忽略 null 字段，parentId 需要显式清空（如改为普通组/售前大组）
+            if (group.getParentId() == null) {
+                groupMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<SysUserGroup>()
+                        .eq(SysUserGroup::getId, group.getId())
+                        .set(SysUserGroup::getParentId, null));
+            }
         }
         return Result.ok();
     }
@@ -42,6 +50,7 @@ public class UserGroupController {
     @DeleteMapping("/{id}")
     @Transactional
     public Result<Void> delete(@PathVariable Long id) {
+        UserContext.requireRole("ADMIN");
         relMapper.delete(new LambdaQueryWrapper<SysUserGroupRel>().eq(SysUserGroupRel::getGroupId, id));
         groupMapper.deleteById(id);
         return Result.ok();
@@ -53,6 +62,7 @@ public class UserGroupController {
     @PostMapping("/members/{groupId}")
     @Transactional
     public Result<Void> setMembers(@PathVariable Long groupId, @RequestBody List<Long> userIds) {
+        UserContext.requireRole("ADMIN");
         relMapper.delete(new LambdaQueryWrapper<SysUserGroupRel>().eq(SysUserGroupRel::getGroupId, groupId));
         if (userIds != null) {
             for (Long uid : userIds) {
@@ -71,6 +81,7 @@ public class UserGroupController {
     @PostMapping("/addMembers/{groupId}")
     @Transactional
     public Result<Integer> addMembers(@PathVariable Long groupId, @RequestBody List<Long> userIds) {
+        UserContext.requireRole("ADMIN");
         if (userIds == null || userIds.isEmpty()) return Result.ok(0);
         List<Long> existing = relMapper.selectList(
                 new LambdaQueryWrapper<SysUserGroupRel>().eq(SysUserGroupRel::getGroupId, groupId))
@@ -106,6 +117,7 @@ public class UserGroupController {
      */
     @PostMapping("/leader")
     public Result<Void> setLeader(@RequestBody Map<String, Object> body) {
+        UserContext.requireRole("ADMIN");
         Long groupId = Long.valueOf(body.get("groupId").toString());
         Long leaderId = Long.valueOf(body.get("leaderId").toString());
         SysUser leader = userMapper.selectById(leaderId);

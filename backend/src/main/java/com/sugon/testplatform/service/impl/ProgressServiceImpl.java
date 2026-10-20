@@ -155,50 +155,51 @@ public class ProgressServiceImpl implements ProgressService {
 
     @Override
     public com.sugon.testplatform.common.PageResult<java.util.Map<String, Object>> projectSummary(int pageNum, int pageSize, String keyword, String date) {
-        // 构建进展查询条件
-        LambdaQueryWrapper<TestProgress> wrapper = new LambdaQueryWrapper<>();
-        if (org.springframework.util.StringUtils.hasText(date)) {
-            // 按日期过滤：只查该日期的进展
-            wrapper.eq(TestProgress::getProgressDate, java.time.LocalDate.parse(date));
+        if (pageNum < 1 || pageSize < 1 || pageSize > 200) {
+            throw new BizException("分页参数无效，每页条数应为1至200");
         }
-        wrapper.orderByDesc(TestProgress::getProgressDate).orderByDesc(TestProgress::getCreateTime);
-        List<TestProgress> progressList = progressMapper.selectList(wrapper);
+        LocalDate progressDate = org.springframework.util.StringUtils.hasText(date) ? LocalDate.parse(date) : null;
 
-        if (progressList.isEmpty()) {
-            return new com.sugon.testplatform.common.PageResult<>(0L, java.util.Collections.emptyList());
-        }
-
-        // 按项目分组
-        java.util.Map<Long, List<TestProgress>> grouped = progressList.stream()
-                .collect(java.util.stream.Collectors.groupingBy(TestProgress::getProjectId, java.util.LinkedHashMap::new, java.util.stream.Collectors.toList()));
-
-        List<Long> projectIds = new java.util.ArrayList<>(grouped.keySet());
-
-        // 查询项目信息
-        LambdaQueryWrapper<TestProject> projWrapper = new LambdaQueryWrapper<>();
-        projWrapper.in(TestProject::getId, projectIds);
+        // 项目侧分页：只查有所需日期进展的项目，套用项目数据范围，数据库分页（避免全表加载）
+        LambdaQueryWrapper<TestProject> qw = new LambdaQueryWrapper<>();
+        qw.ne(TestProject::getStatus, "DELETED");
         if (org.springframework.util.StringUtils.hasText(keyword)) {
-            projWrapper.and(w -> w.like(TestProject::getProjectName, keyword)
+            qw.and(w -> w.like(TestProject::getProjectName, keyword)
                     .or().like(TestProject::getProjectNo, keyword)
                     .or().like(TestProject::getCustomerName, keyword));
         }
-        projWrapper.ne(TestProject::getStatus, "DELETED");
-        List<TestProject> projects = projectMapper.selectList(projWrapper);
-
-        // 组装结果
-        List<java.util.Map<String, Object>> allList = new java.util.ArrayList<>();
-        for (TestProject proj : projects) {
-            List<TestProgress> projProgress = grouped.get(proj.getId());
-            if (projProgress == null || projProgress.isEmpty()) continue;
-
-            allList.add(summaryRow(proj, projProgress));
+        if (progressDate != null) {
+            qw.apply("EXISTS (SELECT 1 FROM test_progress tp WHERE tp.project_id = test_project.id AND tp.progress_date = {0})", progressDate);
+        } else {
+            qw.apply("EXISTS (SELECT 1 FROM test_progress tp WHERE tp.project_id = test_project.id)");
+        }
+        projectService.applyDataScope(qw);
+        qw.orderByDesc(TestProject::getUpdateTime);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<TestProject> page =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<TestProject> result = projectMapper.selectPage(page, qw);
+        if (result.getRecords().isEmpty()) {
+            return new com.sugon.testplatform.common.PageResult<>(result.getTotal(), java.util.Collections.emptyList());
         }
 
-        // 手动分页
-        int total = allList.size();
-        int from = (pageNum - 1) * pageSize;
-        int to = Math.min(from + pageSize, total);
-        List<java.util.Map<String, Object>> paged = from < total ? allList.subList(from, to) : java.util.Collections.emptyList();
-        return new com.sugon.testplatform.common.PageResult<>((long) total, paged);
+        // 仅加载当前页项目的进展
+        List<Long> ids = result.getRecords().stream().map(TestProject::getId).collect(Collectors.toList());
+        LambdaQueryWrapper<TestProgress> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(TestProgress::getProjectId, ids);
+        if (progressDate != null) {
+            wrapper.eq(TestProgress::getProgressDate, progressDate);
+        }
+        wrapper.orderByDesc(TestProgress::getProgressDate).orderByDesc(TestProgress::getCreateTime);
+        List<TestProgress> progressList = progressMapper.selectList(wrapper);
+        Map<Long, List<TestProgress>> grouped = progressList.stream()
+                .collect(Collectors.groupingBy(TestProgress::getProjectId, LinkedHashMap::new, Collectors.toList()));
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (TestProject proj : result.getRecords()) {
+            List<TestProgress> projProgress = grouped.get(proj.getId());
+            if (projProgress == null || projProgress.isEmpty()) continue;
+            records.add(summaryRow(proj, projProgress));
+        }
+        return new com.sugon.testplatform.common.PageResult<>(result.getTotal(), records);
     }
 }

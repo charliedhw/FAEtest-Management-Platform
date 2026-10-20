@@ -106,13 +106,26 @@ class ProgressServiceImplTest {
 
     @Test
     void timeSummaryStillIncludesOnlyProjectsWithProgress() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                TestProject.class);
         TestProgress progress = progress(1L, 1L, "当日进度");
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<TestProject> projectPage =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
+        projectPage.setTotal(1);
+        projectPage.setRecords(List.of(project(1L)));
+        when(projectMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<TestProject> query = invocation.getArgument(1);
+            assertTrue(query.getSqlSegment().contains("EXISTS"));
+            assertTrue(query.getSqlSegment().contains("progress_date ="));
+            return projectPage;
+        });
         when(progressMapper.selectList(any())).thenReturn(List.of(progress));
-        when(projectMapper.selectList(any())).thenReturn(List.of(project(1L), project(2L)));
         PageResult<Map<String, Object>> result = service.projectSummary(1, 20, "", date.toString());
         assertEquals(1L, result.getTotal());
         assertEquals(1L, result.getRecords().get(0).get("projectId"));
         assertEquals("当日进度", result.getRecords().get(0).get("latestProgressContent"));
+        // 数据范围必须被套用
+        verify(projectService).applyDataScope(org.mockito.ArgumentMatchers.<LambdaQueryWrapper<TestProject>>any());
     }
 
     private TestProject project(Long id) {

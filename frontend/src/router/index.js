@@ -48,8 +48,9 @@ router.beforeEach((to, from, next) => {
     return
   }
   // 资源管理模块权限校验
+  let roles = []
+  try { roles = JSON.parse(localStorage.getItem('roles') || '[]') } catch { roles = [] }
   if (to.path.startsWith('/resource')) {
-    const roles = JSON.parse(localStorage.getItem('roles') || '[]')
     const allowed = ['APPROVER', 'FAE_LEADER', 'RESOURCE_ADMIN', 'ADMIN']
     const hasPerm = roles.some(r => allowed.includes(r))
     if (!hasPerm) {
@@ -59,12 +60,16 @@ router.beforeEach((to, from, next) => {
   }
   // 日报汇总：审批组/管理员/FAE负责人可见
   if (to.path === '/report/daily') {
-    const roles = JSON.parse(localStorage.getItem('roles') || '[]')
     const allowed = ['APPROVER', 'FAE_LEADER', 'ADMIN']
     if (!roles.some(r => allowed.includes(r))) {
       next('/dashboard')
       return
     }
+  }
+  // 系统管理：仅管理员
+  if (to.path.startsWith('/system') && !roles.includes('ADMIN')) {
+    next('/dashboard')
+    return
   }
   next()
 })

@@ -10,4 +10,6 @@ public interface AttachmentService {
     void delete(Long id);
     byte[] download(Long id);
     TestAttachment getById(Long id);
+    // 申请删除时级联清理（内部调用，入口已鉴权）：删除MinIO对象与附件记录
+    void deleteByApp(Long appId);
 }

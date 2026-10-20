@@ -177,15 +177,16 @@ const handleDownloadAttachment = async (row) => {
   a.href = url; a.download = row.fileName; a.click()
   URL.revokeObjectURL(url)
 }
-// 提交/存草稿拿到id后，统一上传待上传附件
+// 提交/存草稿拿到id后，统一上传待上传附件；失败的保留在列表中便于重试
 const uploadPendingFiles = async (appId) => {
-  if (!pendingFiles.value.length) return 0
+  if (!pendingFiles.value.length) return { ok: 0, failed: [] }
   let ok = 0
+  const failed = []
   for (const p of pendingFiles.value) {
-    try { await uploadAttachment(appId, p.fileType, p.file); ok++ } catch (e) { /* 单个失败不阻断 */ }
+    try { await uploadAttachment(appId, p.fileType, p.file); ok++ } catch (e) { failed.push(p) }
   }
-  pendingFiles.value = []
-  return ok
+  pendingFiles.value = failed
+  return { ok, failed }
 }
 const formatSize = (bytes) => {
   if (!bytes) return '-'
@@ -237,8 +238,12 @@ const handleSubmit = async () => {
     const appId = res.data || form.id
     // 上传待传附件
     if (appId && pendingFiles.value.length) {
-      const ok = await uploadPendingFiles(appId)
-      ElMessage.success(`提交成功，等待审批（已上传${ok}个附件）`)
+      const { ok, failed } = await uploadPendingFiles(appId)
+      if (failed.length) {
+        ElMessage.warning(`提交成功，但${failed.length}个附件上传失败（${failed.map(f => f.file.name).join('、')}），请联系管理员补传`)
+      } else {
+        ElMessage.success(`提交成功，等待审批（已上传${ok}个附件）`)
+      }
     } else {
       ElMessage.success('提交成功，等待审批')
     }
@@ -257,8 +262,10 @@ const handleDraft = async () => {
   // 上传待传附件
   let msg = '草稿已保存'
   if (appId && pendingFiles.value.length) {
-    const ok = await uploadPendingFiles(appId)
-    msg = `草稿已保存（已上传${ok}个附件）`
+    const { ok, failed } = await uploadPendingFiles(appId)
+    msg = failed.length
+      ? `草稿已保存（已上传${ok}个附件，${failed.length}个失败已保留可再次保存重试）`
+      : `草稿已保存（已上传${ok}个附件）`
   }
   ElMessage.success(msg)
   // 设置id便于继续编辑/再传附件
@@ -266,6 +273,9 @@ const handleDraft = async () => {
   if (form.id) loadAttachments()
   else router.push('/application')
 }
+
+// HTML转义，防止Word导入内容注入脚本
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
 // Word导入
 const handleWordImport = async ({ file }) => {
@@ -286,11 +296,12 @@ const handleWordImport = async ({ file }) => {
       if (k === 'salesId' || k === 'presalesId') continue
       const label = fieldLabels[k] || k
       const display = Array.isArray(v) ? v.join('、') : String(v)
-      lines.push(`<b>${label}</b>：${display.length > 80 ? display.substring(0, 80) + '...' : display}`)
+      const text = display.length > 80 ? display.substring(0, 80) + '...' : display
+      lines.push(`<b>${escapeHtml(label)}</b>：${escapeHtml(text)}`)
     }
     if (warnings && warnings.length > 0) {
       lines.push('<br/><span style="color:#e6a23c">⚠️ 注意事项：</span>')
-      warnings.forEach(w => lines.push(`<span style="color:#e6a23c">• ${w}</span>`))
+      warnings.forEach(w => lines.push(`<span style="color:#e6a23c">• ${escapeHtml(w)}</span>`))
     }
     await ElMessageBox.confirm(
       `<div style="max-height:400px;overflow-y:auto">${lines.join('<br/>')}</div>`,

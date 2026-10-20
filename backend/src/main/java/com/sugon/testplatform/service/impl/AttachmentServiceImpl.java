@@ -47,9 +47,18 @@ public class AttachmentServiceImpl implements AttachmentService {
     public void init() {
         try {
             minioClient = MinioClient.builder().endpoint(endpoint).credentials(accessKey, secretKey).build();
+            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+            if (!exists) {
+                minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+            }
         } catch (Exception e) {
             log.warn("MinIO初始化失败: {}", e.getMessage());
         }
+    }
+
+    private MinioClient requireClient() {
+        if (minioClient == null) throw new BizException("文件存储服务不可用，请联系管理员");
+        return minioClient;
     }
 
     /** 是否能查看该申请（与申请数据范围一致） */
@@ -80,7 +89,7 @@ public class AttachmentServiceImpl implements AttachmentService {
         try {
             String originalName = file.getOriginalFilename();
             String key = "application/" + appId + "/" + UUID.randomUUID() + "_" + originalName;
-            minioClient.putObject(PutObjectArgs.builder().bucket(bucket).object(key)
+            requireClient().putObject(PutObjectArgs.builder().bucket(bucket).object(key)
                     .stream(file.getInputStream(), file.getSize(), -1)
                     .contentType(file.getContentType()).build());
             TestAttachment att = new TestAttachment();
@@ -136,7 +145,7 @@ public class AttachmentServiceImpl implements AttachmentService {
         if (att == null) throw new BizException("附件不存在");
         TestApplication app = applicationMapper.selectById(att.getBizId());
         if (app == null || !canViewApp(app)) throw new BizException("无权下载该附件");
-        try (InputStream in = minioClient.getObject(GetObjectArgs.builder().bucket(bucket).object(att.getFileKey()).build());
+        try (InputStream in = requireClient().getObject(GetObjectArgs.builder().bucket(bucket).object(att.getFileKey()).build());
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             in.transferTo(out);
             return out.toByteArray();
@@ -148,5 +157,19 @@ public class AttachmentServiceImpl implements AttachmentService {
     @Override
     public TestAttachment getById(Long id) {
         return attachmentMapper.selectById(id);
+    }
+
+    @Override
+    public void deleteByApp(Long appId) {
+        List<TestAttachment> list = attachmentMapper.selectList(new LambdaQueryWrapper<TestAttachment>()
+                .eq(TestAttachment::getBizType, "APPLICATION").eq(TestAttachment::getBizId, appId));
+        for (TestAttachment att : list) {
+            try {
+                minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(att.getFileKey()).build());
+            } catch (Exception e) {
+                log.warn("级联删除MinIO对象失败 key={}: {}", att.getFileKey(), e.getMessage());
+            }
+            attachmentMapper.deleteById(att.getId());
+        }
     }
 }

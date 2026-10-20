@@ -130,6 +130,7 @@ public class MailServiceImpl implements MailService {
                 + title + "。\n" + (StringUtils.hasText(action) ? action + "\n" : "")
                 + "\n处理地址：" + link + "\n\n（本邮件由系统自动发送，请勿回复）";
         mlog.setContent(content);
+        mlog.setRetryCount(0);
         try {
             doSend(c, toAddr, "【测试平台】" + title, content);
             mlog.setSuccess(1);
@@ -139,5 +140,50 @@ public class MailServiceImpl implements MailService {
             mlog.setError(e.getMessage() == null ? "发送失败" : (e.getMessage().length() > 480 ? e.getMessage().substring(0, 480) : e.getMessage()));
         }
         logMapper.insert(mlog);
+    }
+
+    /**
+     * 失败邮件自动重试：每10分钟扫描24小时内发送失败且重试未满3次的记录。
+     * "未启用/未配置/无收件邮箱"属主动跳过，不重试。
+     */
+    @Override
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 600000, initialDelay = 600000)
+    public void retryFailed() {
+        java.util.List<MailLog> failed;
+        try {
+            failed = logMapper.selectList(new LambdaQueryWrapper<MailLog>()
+                    .eq(MailLog::getSuccess, 0)
+                    .lt(MailLog::getRetryCount, 3)
+                    .ge(MailLog::getCreateTime, java.time.LocalDateTime.now().minusHours(24))
+                    .notLike(MailLog::getError, "未启用或未配置")
+                    .ne(MailLog::getError, "收件人无邮箱")
+                    .isNotNull(MailLog::getContent)
+                    .last("limit 50"));
+        } catch (Exception e) {
+            log.warn("扫描失败邮件记录失败: {}", e.getMessage());
+            return;
+        }
+        if (failed.isEmpty()) return;
+        MailConfig c = configMapper.selectOne(new LambdaQueryWrapper<MailConfig>().last("limit 1"));
+        if (c == null || c.getEnabled() == null || c.getEnabled() != 1 || !StringUtils.hasText(c.getHost())) {
+            return; // 邮件仍未启用，下轮再试（不消耗重试次数）
+        }
+        log.info("开始重试发送失败邮件，共{}条", failed.size());
+        for (MailLog m : failed) {
+            MailLog update = new MailLog();
+            update.setId(m.getId());
+            update.setRetryCount((m.getRetryCount() == null ? 0 : m.getRetryCount()) + 1);
+            try {
+                doSend(c, m.getToAddr(), m.getSubject(), m.getContent());
+                update.setSuccess(1);
+                update.setError(null);
+                log.info("失败邮件重试成功 id={} to={}", m.getId(), m.getToAddr());
+            } catch (Exception e) {
+                String err = e.getMessage() == null ? "重试发送失败" : e.getMessage();
+                update.setError(err.length() > 480 ? err.substring(0, 480) : err);
+                log.warn("失败邮件重试仍失败 id={} to={}: {}", m.getId(), m.getToAddr(), err);
+            }
+            logMapper.updateById(update);
+        }
     }
 }

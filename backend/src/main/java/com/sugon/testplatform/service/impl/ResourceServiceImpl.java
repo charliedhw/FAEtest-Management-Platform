@@ -1,6 +1,7 @@
 package com.sugon.testplatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sugon.testplatform.common.BizException;
 import com.sugon.testplatform.common.PageResult;
@@ -98,11 +99,16 @@ public class ResourceServiceImpl implements ResourceService {
     public ResourceLoan borrow(ResourceLoan loan) {
         Resource resource = resourceMapper.selectById(loan.getResourceId());
         if (resource == null) throw new BizException("资源不存在");
-        if (!"IDLE".equals(resource.getStatus())) throw new BizException("资源当前不可用");
         // 借出必须关联测试项目
         if (loan.getProjectId() == null) {
             throw new BizException("资产借出必须关联测试项目");
         }
+        // 条件更新占位（乐观锁）：仅 IDLE 才能借出，防止并发借出同一资源
+        int rows = resourceMapper.update(null, new LambdaUpdateWrapper<Resource>()
+                .eq(Resource::getId, resource.getId())
+                .eq(Resource::getStatus, "IDLE")
+                .set(Resource::getStatus, "IN_USE"));
+        if (rows == 0) throw new BizException("资源当前不可用");
 
         loan.setBorrowerId(UserContext.getUserId());
         loan.setBorrowerName(UserContext.getRealName());
@@ -112,12 +118,6 @@ public class ResourceServiceImpl implements ResourceService {
             loan.setLoanDays((int) ChronoUnit.DAYS.between(loan.getLoanTime(), loan.getExpectReturnTime()));
         }
         loanMapper.insert(loan);
-
-        // 更新资源状态
-        Resource update = new Resource();
-        update.setId(resource.getId());
-        update.setStatus("IN_USE");
-        resourceMapper.updateById(update);
         return loan;
     }
 
@@ -126,14 +126,19 @@ public class ResourceServiceImpl implements ResourceService {
     public void returnResource(Long loanId) {
         ResourceLoan loan = loanMapper.selectById(loanId);
         if (loan == null) throw new BizException("借用记录不存在");
-        loan.setActualReturnTime(LocalDateTime.now());
-        loan.setStatus("RETURNED");
-        loanMapper.updateById(loan);
+        // 条件更新：仅借用中/超期可归还，防止重复归还或释放已被他人借出的资源
+        int rows = loanMapper.update(null, new LambdaUpdateWrapper<ResourceLoan>()
+                .eq(ResourceLoan::getId, loanId)
+                .in(ResourceLoan::getStatus, "BORROWED", "OVERDUE")
+                .set(ResourceLoan::getStatus, "RETURNED")
+                .set(ResourceLoan::getActualReturnTime, LocalDateTime.now()));
+        if (rows == 0) throw new BizException("该借用已归还或状态不正确");
 
-        Resource update = new Resource();
-        update.setId(loan.getResourceId());
-        update.setStatus("IDLE");
-        resourceMapper.updateById(update);
+        // 资源仅在使用中时才释放，避免覆盖重新借出的状态
+        resourceMapper.update(null, new LambdaUpdateWrapper<Resource>()
+                .eq(Resource::getId, loan.getResourceId())
+                .eq(Resource::getStatus, "IN_USE")
+                .set(Resource::getStatus, "IDLE"));
     }
 
     @Override

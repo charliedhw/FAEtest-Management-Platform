@@ -15,6 +15,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -44,6 +46,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Long userId = Long.valueOf(claims.getSubject());
                 LoginUser user = buildLoginUser(userId, claims);
                 UserContext.set(user);
+                // 同步写入 SecurityContext，供 SecurityConfig 的 authenticated() 兜底校验
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(userId, null, java.util.List.of());
+                SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (Exception e) {
                 // 携带了 token 但解析失败（过期/伪造），直接 401 终止，不再匿名放行
                 resp.setStatus(401);
@@ -56,6 +62,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             chain.doFilter(req, resp);
         } finally {
             UserContext.clear();
+            SecurityContextHolder.clearContext();
         }
     }
 

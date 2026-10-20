@@ -4,10 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.sugon.testplatform.entity.TestProject;
 import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.service.ExportService;
+import com.sugon.testplatform.service.ProjectService;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -18,9 +19,14 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class ExportServiceImpl implements ExportService {
     private final TestProjectMapper projectMapper;
+    private final ProjectService projectService;
+
+    public ExportServiceImpl(TestProjectMapper projectMapper, @Lazy ProjectService projectService) {
+        this.projectMapper = projectMapper;
+        this.projectService = projectService;
+    }
 
     private static final String[] HEADERS = {
             "客户名称", "项目名称", "所属区域", "项目SPM号", "销售", "方案售前", "测试人员",
@@ -42,10 +48,13 @@ public class ExportServiceImpl implements ExportService {
                 qw.eq(TestProject::getRegion, region);
             }
         }
+        // 数据权限：与项目清单一个口径，普通用户只能导出自己可见的项目
+        projectService.applyDataScope(qw);
         qw.orderByDesc(TestProject::getUpdateTime);
         List<TestProject> list = projectMapper.selectList(qw);
 
-        try (Workbook wb = new XSSFWorkbook()) {
+        // SXSSF 流式写出，避免大结果集全内存 OOM
+        try (Workbook wb = new SXSSFWorkbook(200)) {
             Sheet sheet = wb.createSheet("测试项目汇总");
             // header
             Row header = sheet.createRow(0);

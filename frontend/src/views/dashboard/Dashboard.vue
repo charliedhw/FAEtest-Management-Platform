@@ -56,10 +56,14 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import * as echarts from 'echarts'
-import { jsPDF } from 'jspdf'
+import * as echarts from 'echarts/core'
+import { PieChart, BarChart, LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { ElMessage } from 'element-plus'
 import { getDashboard, getDimensionStats, getTimeDimension } from '../../api'
+
+echarts.use([PieChart, BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
 
 const total = ref(0)
 const inProgress = ref(0)
@@ -120,14 +124,26 @@ const chartTypeFor = (dim) => {
   return 'bar' // region, sales, presales, tester, timeDimension
 }
 
+// 仪表盘首屏数据缓存（status/region/testType/monthly 可直接复用，避免重复请求）
+const dashboardData = ref(null)
+// 每个图表槽位的请求序号，防止快速切换时旧响应覆盖新图表
+const renderSeq = {}
+
+// 项目状态码转中文（dashboard 缓存数据为英文状态码，dimensionStats 接口已转中文，统一在此兜底）
+const STATUS_LABELS = { NOT_START: '未开始', IN_PROGRESS: '进行中', PAUSED: '暂停', COMPLETED: '已完成', CLOSED: '关闭', REJECTED: '已驳回' }
+const translateStatusKeys = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([k, v]) => [STATUS_LABELS[k] || k, v]))
+
 const renderChart = async (idx) => {
   const slot = slots.value[idx]
   const dim = slot.dimension
-  // 时间维度走专门接口
+  const seq = (renderSeq[idx] || 0) + 1
+  renderSeq[idx] = seq
+  // 时间维度走专门接口；仪表盘已返回的维度直接复用
   const res = dim === 'timeDimension'
     ? await getTimeDimension(slot.timeUnit || 'month')
-    : await getDimensionStats(dim)
-  const data = res.data || {}
+    : (dashboardData.value && dashboardData.value[dim] ? { data: dashboardData.value[dim] } : await getDimensionStats(dim))
+  if (renderSeq[idx] !== seq) return
+  const data = translateStatusKeys(res.data)
   const el = chartRefs.value[idx]
   if (!el) return
   if (chartInstances.value[idx]) {
@@ -252,6 +268,7 @@ const exportPdf = async () => {
   if (exportDims.value.length === 0) { ElMessage.warning('请至少选择一个分布类型'); return }
   exporting.value = true
   try {
+    const { jsPDF } = await import('jspdf')
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const pageW = pdf.internal.pageSize.getWidth()
     const pageH = pdf.internal.pageSize.getHeight()
@@ -282,15 +299,14 @@ const handleResize = () => {
 onMounted(async () => {
   const res = await getDashboard()
   const d = res.data
+  dashboardData.value = d
   total.value = d.total || 0
   inProgress.value = d.status?.IN_PROGRESS || 0
   completed.value = d.status?.COMPLETED || 0
   paused.value = d.status?.PAUSED || 0
 
   await nextTick()
-  for (let i = 0; i < slots.value.length; i++) {
-    await renderChart(i)
-  }
+  await Promise.all(slots.value.map((_, i) => renderChart(i)))
   window.addEventListener('resize', handleResize)
 })
 

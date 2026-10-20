@@ -32,7 +32,7 @@
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
             <el-button v-if="row.status === 'DRAFT' && row.applicantId == userStore.userId" link type="primary" size="small" @click="editDraft(row)">编辑</el-button>
             <el-button v-if="row.status === 'REJECTED' && row.applicantId == userStore.userId" link type="warning" size="small" @click="resubmit(row)">重新提交</el-button>
-            <el-button v-if="['DRAFT','PENDING_PRESALES'].includes(row.status) && row.applicantId == userStore.userId" link type="danger" size="small" @click="handleWithdraw(row)">撤回</el-button>
+            <el-button v-if="['DRAFT','PENDING_PRESALES','PENDING_APPROVAL','PENDING_LEADER','PENDING_ASSIGN'].includes(row.status) && row.applicantId == userStore.userId" link type="danger" size="small" @click="handleWithdraw(row)">撤回</el-button>
             <el-button v-if="canDeleteRow(row)" link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>

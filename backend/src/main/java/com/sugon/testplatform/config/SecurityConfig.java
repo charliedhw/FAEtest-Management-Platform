@@ -33,9 +33,11 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/login", "/auth/captcha", "/health", "/error").permitAll()
-                .anyRequest().permitAll()  // 权限在拦截器/注解层控制，这里放行由JWT过滤器解析
+                // 兜底：白名单外必须携带有效JWT（JwtAuthFilter 写入 SecurityContext）
+                .anyRequest().authenticated()
             )
             .exceptionHandling(e -> e.authenticationEntryPoint((req, resp, ex) -> {
+                resp.setStatus(401);
                 resp.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 resp.setCharacterEncoding("UTF-8");
                 resp.getWriter().write(om.writeValueAsString(Result.error(401, "未登录或登录已过期")));
