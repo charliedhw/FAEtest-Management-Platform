@@ -13,7 +13,8 @@ public class SysUserGroup {
     private Long id;
     private String groupCode;
     private String groupName;
-    private String groupType;   // GENERAL普通组 / PRESALES_REGION售前区域组
+    private String groupType;   // GENERAL普通组 / PRESALES_ROOT售前大组 / PRESALES_DEPT售前业务部 / PRESALES_REGION售前置小组
+    private Long parentId;      // 父组ID（售前大组->业务部->子组）
     private Long leaderId;
     private String leaderName;
     private String remark;

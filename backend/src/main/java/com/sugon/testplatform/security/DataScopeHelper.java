@@ -17,7 +17,7 @@ public class DataScopeHelper {
         List<String> roles = UserContext.getRoles();
         return roles.contains("ADMIN") || roles.contains("APPROVER")
                 || roles.contains("LEADER") || roles.contains("FAE_LEADER")
-                || roles.contains("RESOURCE_ADMIN");
+                || roles.contains("RESOURCE_ADMIN") || roles.contains("PRESALES_LEADER");
     }
 
     /**

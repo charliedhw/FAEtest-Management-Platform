@@ -16,4 +16,8 @@ public interface ProjectService {
     boolean canEditProgress(Long projectId);
     // 当前用户是否有权查看该项目（数据范围）
     boolean canView(Long projectId);
+    // 给项目查询追加当前用户的数据范围条件（导出/汇总等场景复用）
+    void applyDataScope(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TestProject> qw);
+    // QueryWrapper 版本（统计分组查询使用），规则与上面一致
+    void applyDataScope(com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TestProject> qw);
 }

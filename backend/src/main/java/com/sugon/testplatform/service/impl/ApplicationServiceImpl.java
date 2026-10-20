@@ -1,6 +1,7 @@
 package com.sugon.testplatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sugon.testplatform.common.BizException;
 import com.sugon.testplatform.common.PageResult;
@@ -19,14 +20,19 @@ import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.security.PresalesScope;
 import com.sugon.testplatform.security.UserContext;
 import com.sugon.testplatform.service.ApplicationService;
+import com.sugon.testplatform.service.AttachmentService;
 import com.sugon.testplatform.service.DictService;
 import com.sugon.testplatform.service.MailService;
 import com.sugon.testplatform.service.NotifyService;
 import com.sugon.testplatform.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -35,6 +41,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApplicationServiceImpl implements ApplicationService {
@@ -48,6 +55,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final MailService mailService;
     private final UserService userService;
     private final PresalesScope presalesScope;
+    private final AttachmentService attachmentService;
 
     // 节点常量
     public static final String NODE_PRESALES = "PRESALES_EVAL";     // 售前评估(已废弃，保留兼容)
@@ -71,6 +79,42 @@ public class ApplicationServiceImpl implements ApplicationService {
         Long count = applicationMapper.selectCount(new LambdaQueryWrapper<TestApplication>()
                 .likeRight(TestApplication::getAppNo, "TA" + date));
         return "TA" + date + String.format("%03d", count + 1);
+    }
+
+    /** 插入申请单：单号有唯一索引，并发冲突时重试生成 */
+    private void insertWithAppNoRetry(TestApplication app) {
+        for (int i = 0; i < 3; i++) {
+            try {
+                app.setAppNo(genAppNo());
+                applicationMapper.insert(app);
+                return;
+            } catch (DuplicateKeyException e) {
+                if (i == 2) throw new BizException("申请单号生成冲突，请重新提交");
+            }
+        }
+    }
+
+    /** 带节点乐观锁的更新：并发审批/排期/分配时后者直接失败，避免重复流转 */
+    private void updateGuarded(TestApplication app, String expectedNode) {
+        LambdaUpdateWrapper<TestApplication> uw = new LambdaUpdateWrapper<>();
+        uw.eq(TestApplication::getId, app.getId());
+        if (expectedNode != null) uw.eq(TestApplication::getCurrentNode, expectedNode);
+        int rows = applicationMapper.update(app, uw);
+        if (rows == 0) throw new BizException("申请状态已被其他人变更，请刷新后重试");
+    }
+
+    /** 事务提交后再执行（用于邮件/通知触发，避免回滚后消息已发出）；无事务时立即执行 */
+    private void runAfterCommit(Runnable r) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    r.run();
+                }
+            });
+        } else {
+            r.run();
+        }
     }
 
     @Override
@@ -105,7 +149,6 @@ public class ApplicationServiceImpl implements ApplicationService {
         } else {
             app = new TestApplication();
             BeanUtils.copyProperties(req, app);
-            app.setAppNo(genAppNo());
             app.setApplicantId(userId);
             app.setApplicantName(realName);
         }
@@ -117,7 +160,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (req.getId() != null) {
             applicationMapper.updateById(app);
         } else {
-            applicationMapper.insert(app);
+            insertWithAppNoRetry(app);
         }
 
         record(app.getId(), NODE_APPROVAL, userId, realName, "SUBMIT", "售前发起测试申请");
@@ -159,12 +202,11 @@ public class ApplicationServiceImpl implements ApplicationService {
             app = new TestApplication();
             BeanUtils.copyProperties(req, app);
             app.setTestType(normalizeTestType(req.getTestType()));
-            app.setAppNo(genAppNo());
             app.setApplicantId(userId);
             app.setApplicantName(UserContext.getRealName());
             app.setStatus(ST_DRAFT);
             app.setCurrentNode(NODE_PRESALES);
-            applicationMapper.insert(app);
+            insertWithAppNoRetry(app);
         }
         return app.getId();
     }
@@ -178,10 +220,23 @@ public class ApplicationServiceImpl implements ApplicationService {
         String userName = UserContext.getRealName();
         String node = app.getCurrentNode();
 
+        // 按节点校验审批人角色：审批组节点=APPROVER，超期节点=LEADER（管理员均可）
+        if (NODE_APPROVAL.equals(node)) {
+            if (!UserContext.hasAnyRole("APPROVER", "ADMIN")) {
+                throw new BizException("只有测试审批组才能审批该申请");
+            }
+        } else if (NODE_LEADER.equals(node)) {
+            if (!UserContext.hasAnyRole("LEADER", "ADMIN")) {
+                throw new BizException("超期申请需分管领导审批");
+            }
+        } else {
+            throw new BizException("当前节点不支持审批操作");
+        }
+
         if ("REJECT".equals(req.getAction())) {
             app.setStatus(ST_REJECTED);
             app.setRejectReason(StringUtils.hasText(req.getRejectReason()) ? req.getRejectReason() : req.getOpinion());
-            applicationMapper.updateById(app);
+            updateGuarded(app, node);
             record(app.getId(), node, userId, userName, "REJECT", req.getOpinion());
             // 通知申请人 -> 跳转测试申请列表
             notifyService.send(app.getApplicantId(), "测试申请被驳回",
@@ -202,7 +257,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 if (needLeader) {
                     app.setStatus(ST_LEADER);
                     app.setCurrentNode(NODE_LEADER);
-                    applicationMapper.updateById(app);
+                    updateGuarded(app, node);
                     record(app.getId(), node, userId, userName, "APPROVE", req.getOpinion());
                     notifyService.sendToRole("LEADER", "超期借测申请待审批",
                             "测试申请【" + app.getProjectName() + "】申请周期" + app.getApplyDays() + "天，超过" + approveDays + "天，需您审批。",
@@ -225,7 +280,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private void toAssign(TestApplication app, String node, Long userId, String userName, String opinion) {
         app.setStatus(ST_ASSIGN);
         app.setCurrentNode(NODE_ASSIGN);
-        applicationMapper.updateById(app);
+        updateGuarded(app, node);
         record(app.getId(), node, userId, userName, "APPROVE", opinion);
         // 流转给FAE测试工程师组负责人(daihw)分配任务 -> 跳转审批中心
         Long assigneeId = getFaeGroupLeaderId();
@@ -250,41 +305,57 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     /** 通知全体排期员(SCHEDULER角色)发站内信+邮件；excludeUserId 用于跳过已单独通知过的人(如分配人也是排期员时避免重复) */
     private void notifyAndMailSchedulers(Long excludeUserId, String title, String content, String jumpUrl, String bizType, Long bizId) {
-        try {
-            for (com.sugon.testplatform.entity.SysUser u : userService.listByRole("SCHEDULER")) {
-                if (excludeUserId != null && excludeUserId.equals(u.getId())) continue;
-                notifyService.send(u.getId(), title, content, bizType, bizId, jumpUrl);
-                mailService.sendNotify(u.getEmail(), u.getRealName(), title, content, jumpUrl, bizType, bizId);
+        runAfterCommit(() -> {
+            try {
+                for (com.sugon.testplatform.entity.SysUser u : userService.listByRole("SCHEDULER")) {
+                    if (excludeUserId != null && excludeUserId.equals(u.getId())) continue;
+                    notifyService.send(u.getId(), title, content, bizType, bizId, jumpUrl);
+                    mailService.sendNotify(u.getEmail(), u.getRealName(), title, content, jumpUrl, bizType, bizId);
+                }
+            } catch (Exception e) {
+                log.warn("排期员通知失败 title={}: {}", title, e.getMessage());
             }
-        } catch (Exception e) { /* 通知失败不影响流程 */ }
+        });
     }
 
     /** 给单个用户发流程邮件（按其sys_user.email） */
     private void mailToUser(Long userId, String title, String action, String jumpUrl, String bizType, Long bizId) {
-        try {
-            if (userId == null) return;
-            com.sugon.testplatform.entity.SysUser u = userMapper.selectById(userId);
-            if (u != null) mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
-        } catch (Exception e) { /* 邮件失败不影响流程 */ }
+        runAfterCommit(() -> {
+            try {
+                if (userId == null) return;
+                com.sugon.testplatform.entity.SysUser u = userMapper.selectById(userId);
+                if (u != null) mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+            } catch (Exception e) {
+                log.warn("流程邮件发送失败 userId={} title={}: {}", userId, title, e.getMessage());
+            }
+        });
     }
 
     /** 给指定邮箱地址发流程邮件（地址从 sys_config 读取，key=mail.approve.to，默认 test_sp@sugon.com） */
     private void mailToAddr(String defaultAddr, String title, String action, String jumpUrl, String bizType, Long bizId) {
-        try {
-            String addr = dictService.getConfig("mail.approve.to", defaultAddr);
-            if (StringUtils.hasText(addr)) {
-                mailService.sendNotify(addr.trim(), null, title, action, jumpUrl, bizType, bizId);
+        runAfterCommit(() -> {
+            try {
+                String addr = dictService.getConfig("mail.approve.to", defaultAddr);
+                if (StringUtils.hasText(addr)) {
+                    mailService.sendNotify(addr.trim(), null, title, action, jumpUrl, bizType, bizId);
+                }
+            } catch (Exception e) {
+                log.warn("流程邮件发送失败 addr={} title={}: {}", defaultAddr, title, e.getMessage());
             }
-        } catch (Exception e) { /* 邮件失败不影响流程 */ }
+        });
     }
 
     /** 给某角色所有用户发流程邮件 */
     private void mailToRole(String roleCode, String title, String action, String jumpUrl, String bizType, Long bizId) {
-        try {
-            for (com.sugon.testplatform.entity.SysUser u : userService.listByRole(roleCode)) {
-                mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+        runAfterCommit(() -> {
+            try {
+                for (com.sugon.testplatform.entity.SysUser u : userService.listByRole(roleCode)) {
+                    mailService.sendNotify(u.getEmail(), u.getRealName(), title, action, jumpUrl, bizType, bizId);
+                }
+            } catch (Exception e) {
+                log.warn("流程邮件发送失败 role={} title={}: {}", roleCode, title, e.getMessage());
             }
-        } catch (Exception e) { /* 邮件失败不影响流程 */ }
+        });
     }
 
     /**
@@ -326,7 +397,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         app.setScheduleBy(UserContext.getUserId());
         app.setScheduleByName(UserContext.getRealName());
         app.setScheduleTime(LocalDateTime.now());
-        applicationMapper.updateById(app);
+        updateGuarded(app, NODE_ASSIGN);
         record(app.getId(), NODE_ASSIGN, UserContext.getUserId(), UserContext.getRealName(), "SCHEDULE",
                 "排期:" + req.getScheduleStartTime() + " ~ " + req.getScheduleEndTime()
                         + (StringUtils.hasText(req.getScheduleRemark()) ? "，说明:" + req.getScheduleRemark() : ""));
@@ -350,10 +421,15 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!NODE_ASSIGN.equals(app.getCurrentNode())) {
             throw new BizException("当前申请不在待分配节点");
         }
+        // 分配权限：FAE负责人/资源管理员(兜底分配人)/管理员
+        if (!UserContext.hasAnyRole("FAE_LEADER", "RESOURCE_ADMIN", "ADMIN")) {
+            throw new BizException("只有FAE负责人或管理员才能分配测试任务");
+        }
         Long userId = UserContext.getUserId();
         app.setStatus(ST_ASSIGNED);
         app.setCurrentNode(NODE_DONE);
-        applicationMapper.updateById(app);
+        // 乐观锁：仅当仍处于待分配节点才允许分配，防止并发重复立项
+        updateGuarded(app, NODE_ASSIGN);
 
         // 创建项目
         TestProject project = new TestProject();
@@ -420,8 +496,12 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!app.getApplicantId().equals(UserContext.getUserId())) {
             throw new BizException("只能撤回自己的申请");
         }
+        // 已立项(已创建项目)/已关闭的申请不能撤回，避免产生孤儿项目
+        if (ST_ASSIGNED.equals(app.getStatus()) || ST_CLOSED.equals(app.getStatus())) {
+            throw new BizException("已立项或已关闭的申请不能撤回");
+        }
         app.setStatus(ST_CLOSED);
-        applicationMapper.updateById(app);
+        updateGuarded(app, app.getCurrentNode());
         record(appId, app.getCurrentNode(), UserContext.getUserId(), UserContext.getRealName(), "WITHDRAW", "申请人撤回");
     }
 
@@ -441,7 +521,8 @@ public class ApplicationServiceImpl implements ApplicationService {
                 throw new BizException("审批中/已立项的申请不能删除");
             }
         }
-        // 级联删除审批记录
+        // 级联删除申请附件(含MinIO文件)与审批记录
+        attachmentService.deleteByApp(appId);
         approvalRecordMapper.delete(new LambdaQueryWrapper<ApprovalRecord>().eq(ApprovalRecord::getAppId, appId));
         applicationMapper.deleteById(appId);
     }
@@ -484,7 +565,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         boolean seeAll = roles.contains("ADMIN") || roles.contains("APPROVER")
                 || roles.contains("LEADER") || roles.contains("RESOURCE_ADMIN")
-                || roles.contains("FAE_LEADER");
+                || roles.contains("FAE_LEADER") || roles.contains("PRESALES_LEADER");
         if (seeAll) return;
 
         if (roles.contains("PRESALES")) {
@@ -517,7 +598,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         Long uid = UserContext.requireUserId();
         boolean seeAll = roles.contains("ADMIN") || roles.contains("APPROVER")
                 || roles.contains("LEADER") || roles.contains("RESOURCE_ADMIN")
-                || roles.contains("FAE_LEADER");
+                || roles.contains("FAE_LEADER") || roles.contains("PRESALES_LEADER");
         if (!seeAll) {
             boolean visible = uid.equals(app.getApplicantId())
                     || uid.equals(app.getPresalesId()) || uid.equals(app.getSalesId());

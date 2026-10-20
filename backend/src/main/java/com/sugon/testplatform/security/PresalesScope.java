@@ -26,17 +26,36 @@ public class PresalesScope {
     }
 
     /**
-     * 返回当前用户作为售前区域组组长可管辖的组员id集合；非组长返回空集合
+     * 返回当前用户作为售前组组长可管辖的组员id集合（含所有下级组成员，递归）：
+     * 售前大组(PRESALES_ROOT)负责人 -> 全部售前；业务部(PRESALES_DEPT)负责人 -> 本部全员；
+     * 子组(PRESALES_REGION)组长 -> 本组成员。非组长返回空集合。
      */
     public List<Long> memberIdsOfLedGroups(Long uid) {
         if (uid == null) return Collections.emptyList();
-        List<SysUserGroup> groups = groupMapper.selectList(new LambdaQueryWrapper<SysUserGroup>()
-                .eq(SysUserGroup::getGroupType, "PRESALES_REGION")
+        List<SysUserGroup> led = groupMapper.selectList(new LambdaQueryWrapper<SysUserGroup>()
+                .in(SysUserGroup::getGroupType, "PRESALES_ROOT", "PRESALES_DEPT", "PRESALES_REGION")
                 .eq(SysUserGroup::getLeaderId, uid));
-        if (groups.isEmpty()) return Collections.emptyList();
-        List<Long> gids = groups.stream().map(SysUserGroup::getId).collect(Collectors.toList());
+        if (led.isEmpty()) return Collections.emptyList();
+
+        // 以所领导的组为根，沿 parent_id 向下收集全部后代组
+        List<SysUserGroup> all = groupMapper.selectList(new LambdaQueryWrapper<SysUserGroup>()
+                .in(SysUserGroup::getGroupType, "PRESALES_ROOT", "PRESALES_DEPT", "PRESALES_REGION"));
+        java.util.Map<Long, List<Long>> childrenOf = new java.util.HashMap<>();
+        for (SysUserGroup g : all) {
+            if (g.getParentId() != null) {
+                childrenOf.computeIfAbsent(g.getParentId(), k -> new java.util.ArrayList<>()).add(g.getId());
+            }
+        }
+        java.util.Set<Long> groupIds = new java.util.HashSet<>();
+        java.util.Deque<Long> queue = new java.util.ArrayDeque<>();
+        for (SysUserGroup g : led) queue.add(g.getId());
+        while (!queue.isEmpty()) {
+            Long gid = queue.poll();
+            if (!groupIds.add(gid)) continue;
+            queue.addAll(childrenOf.getOrDefault(gid, Collections.emptyList()));
+        }
         List<SysUserGroupRel> rels = relMapper.selectList(new LambdaQueryWrapper<SysUserGroupRel>()
-                .in(SysUserGroupRel::getGroupId, gids));
+                .in(SysUserGroupRel::getGroupId, groupIds));
         return rels.stream().map(SysUserGroupRel::getUserId).distinct().collect(Collectors.toList());
     }
 

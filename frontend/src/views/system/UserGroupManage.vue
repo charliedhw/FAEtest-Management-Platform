@@ -5,23 +5,25 @@
         <span style="font-weight:bold">用户组管理</span>
         <el-button type="primary" style="margin-left:auto" @click="openForm()"><el-icon><Plus /></el-icon>新增用户组</el-button>
       </div>
-      <el-table :data="list" v-loading="loading" stripe>
-        <el-table-column prop="groupCode" label="组编码" width="160" />
-        <el-table-column prop="groupName" label="组名称" width="180" />
-        <el-table-column label="组类型" width="140">
+      <el-table :data="list" v-loading="loading" stripe row-key="id" default-expand-all :tree-props="{ children: 'children' }">
+        <el-table-column prop="groupName" label="组名称" width="200" />
+        <el-table-column prop="groupCode" label="组编码" width="140" />
+        <el-table-column label="组类型" width="110">
           <template #default="{ row }">
-            <el-tag v-if="row.groupType==='PRESALES_REGION'" type="warning" size="small">售前区域组</el-tag>
+            <el-tag v-if="row.groupType==='PRESALES_ROOT'" type="danger" size="small">售前大组</el-tag>
+            <el-tag v-else-if="row.groupType==='PRESALES_DEPT'" type="warning" size="small">售前业务部</el-tag>
+            <el-tag v-else-if="row.groupType==='PRESALES_REGION'" type="success" size="small">售前置小组</el-tag>
             <el-tag v-else type="info" size="small">普通组</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="leaderName" label="负责人" width="120">
+        <el-table-column prop="leaderName" label="负责人" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.leaderName" type="success" size="small">{{ row.leaderName }}</el-tag>
             <span v-else style="color:#999">未设置</span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" />
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
+        <el-table-column label="操作" width="240">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openMembers(row)">成员管理</el-button>
             <el-button link type="warning" size="small" @click="openLeader(row)">设负责人</el-button>
@@ -40,9 +42,16 @@
         <el-form-item label="组类型">
           <el-select v-model="form.groupType" placeholder="普通组" style="width:100%">
             <el-option label="普通组" value="GENERAL" />
-            <el-option label="售前区域组" value="PRESALES_REGION" />
+            <el-option label="售前大组(根)" value="PRESALES_ROOT" />
+            <el-option label="售前业务部" value="PRESALES_DEPT" />
+            <el-option label="售前置小组" value="PRESALES_REGION" />
           </el-select>
-          <div v-if="form.groupType==='PRESALES_REGION'" style="color:#e6a23c;font-size:12px;margin-top:4px">售前区域组：将该区域售前加为组员，负责人即组长，组长可查看本组所有售前的测试项目</div>
+          <div v-if="form.groupType && form.groupType.startsWith('PRESALES')" style="color:#e6a23c;font-size:12px;margin-top:4px">售前组负责人可见本组及所有下级组售前的测试项目（按层级汇总）</div>
+        </el-form-item>
+        <el-form-item v-if="form.groupType && form.groupType.startsWith('PRESALES') && form.groupType !== 'PRESALES_ROOT'" label="上级组">
+          <el-select v-model="form.parentId" placeholder="选择上级组" style="width:100%" clearable>
+            <el-option v-for="g in parentOptions" :key="g.id" :label="g.groupName" :value="g.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
       </el-form>
@@ -75,12 +84,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getGroupList, saveGroup, deleteGroup, getGroupMembers, setGroupMembers, setGroupLeader, listAllUser } from '../../api'
 
 const loading = ref(false)
-const list = ref([])
+const flatList = ref([])
 const allUsers = ref([])
 const formVisible = ref(false)
 const form = ref({})
@@ -95,9 +104,26 @@ const load = async () => {
   loading.value = true
   try {
     const res = await getGroupList()
-    list.value = res.data
+    flatList.value = res.data
   } finally { loading.value = false }
 }
+
+// 扁平列表 -> 树（按 parentId 挂接：售前大组->业务部->子组）
+const list = computed(() => {
+  const map = {}
+  const roots = []
+  flatList.value.forEach(g => { map[g.id] = { ...g, children: [] } })
+  flatList.value.forEach(g => {
+    if (g.parentId && map[g.parentId]) map[g.parentId].children.push(map[g.id])
+    else roots.push(map[g.id])
+  })
+  Object.values(map).forEach(g => { if (!g.children.length) delete g.children })
+  return roots
+})
+
+// 上级组候选：售前大组/业务部（排除自身）
+const parentOptions = computed(() => flatList.value.filter(g =>
+  g.id !== form.value.id && ['PRESALES_ROOT', 'PRESALES_DEPT'].includes(g.groupType)))
 
 const loadUsers = async () => {
   const res = await listAllUser()
@@ -106,7 +132,11 @@ const loadUsers = async () => {
 }
 
 const openForm = (row) => { form.value = row ? { ...row } : { groupType: 'GENERAL' }; formVisible.value = true }
-const handleSave = async () => { await saveGroup(form.value); ElMessage.success('保存成功'); formVisible.value = false; load() }
+const handleSave = async () => {
+  const payload = { ...form.value }
+  if (!payload.groupType || !payload.groupType.startsWith('PRESALES') || payload.groupType === 'PRESALES_ROOT') payload.parentId = null
+  await saveGroup(payload); ElMessage.success('保存成功'); formVisible.value = false; load()
+}
 const handleDelete = async (row) => {
   await ElMessageBox.confirm(`确认删除用户组【${row.groupName}】？`, '警告', { type: 'warning' })
   await deleteGroup(row.id); ElMessage.success('已删除'); load()

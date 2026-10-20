@@ -12,6 +12,7 @@ import com.sugon.testplatform.mapper.TestApplicationMapper;
 import com.sugon.testplatform.mapper.TestProgressMapper;
 import com.sugon.testplatform.mapper.TestProjectMapper;
 import com.sugon.testplatform.mapper.TestReportMapper;
+import com.sugon.testplatform.mapper.TestStageMapper;
 import com.sugon.testplatform.mapper.SysUserMapper;
 import com.sugon.testplatform.security.PresalesScope;
 import com.sugon.testplatform.security.UserContext;
@@ -40,11 +41,12 @@ public class ProjectServiceImpl implements ProjectService {
     private final ResourceService resourceService;
     private final SysUserMapper sysUserMapper;
     private final PresalesScope presalesScope;
+    private final TestStageMapper stageMapper;
 
     public ProjectServiceImpl(TestProjectMapper projectMapper, TestProgressMapper progressMapper,
                               TestReportMapper reportMapper, TestApplicationMapper applicationMapper,
                               ReportService reportService, @Lazy ResourceService resourceService,
-                              SysUserMapper sysUserMapper, PresalesScope presalesScope) {
+                              SysUserMapper sysUserMapper, PresalesScope presalesScope, TestStageMapper stageMapper) {
         this.projectMapper = projectMapper;
         this.progressMapper = progressMapper;
         this.reportMapper = reportMapper;
@@ -53,6 +55,7 @@ public class ProjectServiceImpl implements ProjectService {
         this.resourceService = resourceService;
         this.sysUserMapper = sysUserMapper;
         this.presalesScope = presalesScope;
+        this.stageMapper = stageMapper;
     }
 
     @Override
@@ -73,6 +76,49 @@ public class ProjectServiceImpl implements ProjectService {
      * 测试(TESTER): tester_ids包含自己
      * 其他: 自己创建
      */
+    @Override
+    public void applyDataScope(LambdaQueryWrapper<TestProject> qw) {
+        applyProjectDataScope(qw);
+    }
+
+    /**
+     * QueryWrapper 版本的数据范围（统计分组查询使用）。
+     * 规则与 applyProjectDataScope 完全一致，使用原始列名；修改规则时两处必须同步。
+     */
+    @Override
+    public void applyDataScope(com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TestProject> qw) {
+        java.util.List<String> roles = UserContext.getRoles();
+        Long uid = UserContext.getUserId();
+        if (uid == null) {
+            qw.eq("id", -1);
+            return;
+        }
+        if (isSeeAll(roles)) return;
+        java.util.List<Long> ledMemberIds = roles.contains("PRESALES") ? presalesScope.memberIdsOfLedGroups(uid) : java.util.List.of();
+        qw.and(w -> {
+            if (roles.contains("PRESALES")) {
+                w.eq("presales_id", uid).or();
+                if (!ledMemberIds.isEmpty()) {
+                    w.in("presales_id", ledMemberIds).or();
+                    w.in("create_by", ledMemberIds).or();
+                }
+            }
+            if (roles.contains("SALES")) {
+                w.eq("sales_id", uid).or();
+            }
+            if (roles.contains("TESTER")) {
+                w.apply("(tester_ids = {0} OR tester_ids LIKE CONCAT({0},',%') OR tester_ids LIKE CONCAT('%,',{0}) OR tester_ids LIKE CONCAT('%,',{0},',%'))", uid.toString()).or();
+            }
+            w.eq("create_by", uid);
+        });
+    }
+
+    private boolean isSeeAll(java.util.List<String> roles) {
+        return roles.contains("ADMIN") || roles.contains("APPROVER")
+                || roles.contains("LEADER") || roles.contains("RESOURCE_ADMIN")
+                || roles.contains("FAE_LEADER") || roles.contains("PRESALES_LEADER");
+    }
+
     private void applyProjectDataScope(LambdaQueryWrapper<TestProject> qw) {
         java.util.List<String> roles = com.sugon.testplatform.security.UserContext.getRoles();
         Long uid = com.sugon.testplatform.security.UserContext.getUserId();
@@ -80,9 +126,7 @@ public class ProjectServiceImpl implements ProjectService {
             qw.eq(TestProject::getId, -1);
             return;
         }
-        boolean seeAll = roles.contains("ADMIN") || roles.contains("APPROVER")
-                || roles.contains("LEADER") || roles.contains("RESOURCE_ADMIN")
-                || roles.contains("FAE_LEADER");
+        boolean seeAll = isSeeAll(roles);
         if (seeAll) return;
 
         // 售前区域组组长：可见本组组员关联的项目
@@ -304,6 +348,10 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public void update(TestProject project) {
         if (project.getId() == null) throw new BizException("项目ID不能为空");
+        // 编辑权限：管理员或被分配的测试人员
+        if (!canEditProgress(project.getId())) {
+            throw new BizException("只有管理员或被分配的测试人员才能编辑项目");
+        }
         // 如果变更了"是否重点"字段,校验权限(管理员+测试审批组)
         if (project.getIsKeyProject() != null) {
             TestProject old = projectMapper.selectById(project.getId());
@@ -369,17 +417,15 @@ public class ProjectServiceImpl implements ProjectService {
             throw new BizException("无权限删除项目，请联系管理员");
         }
 
+        // 回收该项目名下借用中的资源（避免资源永久占用）
+        resourceService.recycleByProject(id);
         // 级联删除进展
         progressMapper.delete(new LambdaQueryWrapper<TestProgress>().eq(TestProgress::getProjectId, id));
-        // 级联删除报告(含MinIO文件)
-        List<TestReport> reports = reportMapper.selectList(
-                new LambdaQueryWrapper<TestReport>().eq(TestReport::getProjectId, id));
-        for (TestReport r : reports) {
-            try {
-                reportService.delete(r.getId());
-            } catch (Exception ignored) {
-            }
-        }
+        // 级联删除阶段任务
+        stageMapper.delete(new LambdaQueryWrapper<com.sugon.testplatform.entity.TestStage>()
+                .eq(com.sugon.testplatform.entity.TestStage::getProjectId, id));
+        // 级联删除报告(含MinIO文件，内部路径不再重复鉴权——本方法入口已鉴权)
+        reportService.deleteByProject(id);
         // 解除申请单关联(用实体UpdateWrapper显式set null)
         com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<TestApplication> uw =
                 new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();

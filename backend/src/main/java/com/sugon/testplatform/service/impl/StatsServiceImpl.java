@@ -3,9 +3,9 @@ package com.sugon.testplatform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.sugon.testplatform.entity.TestProject;
 import com.sugon.testplatform.mapper.TestProjectMapper;
-import com.sugon.testplatform.security.DataScopeHelper;
+import com.sugon.testplatform.service.ProjectService;
 import com.sugon.testplatform.service.StatsService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -15,18 +15,22 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class StatsServiceImpl implements StatsService {
     private final TestProjectMapper projectMapper;
+    private final ProjectService projectService;
+
+    public StatsServiceImpl(TestProjectMapper projectMapper, @Lazy ProjectService projectService) {
+        this.projectMapper = projectMapper;
+        this.projectService = projectService;
+    }
 
     /**
-     * 给统计查询追加数据权限条件
+     * 给统计查询追加数据权限条件（与项目清单同一套规则，含售前区域组/大组组长）
      */
     private <T> QueryWrapper<T> scoped(QueryWrapper<T> qw) {
-        String scope = DataScopeHelper.projectScopeSql("");
-        if (scope != null && !scope.isEmpty()) {
-            qw.apply(scope.substring(4)); // 去掉前导 " AND"
-        }
+        @SuppressWarnings("unchecked")
+        QueryWrapper<TestProject> typed = (QueryWrapper<TestProject>) qw;
+        projectService.applyDataScope(typed);
         return qw;
     }
 
