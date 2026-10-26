@@ -203,6 +203,8 @@ import { saveWeeklyReport, deleteWeeklyReport, getWeeklyReportPage, getMyLatestR
 import { formatDateTime } from '../../utils/format'
 import { useUserStore } from '../../store/user'
 
+defineOptions({ name: 'WeeklyReport' })
+
 const userStore = useUserStore()
 const list = ref([])
 const loading = ref(false)

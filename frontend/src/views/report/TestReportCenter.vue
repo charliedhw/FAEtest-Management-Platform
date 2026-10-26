@@ -105,6 +105,8 @@ import { ElMessage } from 'element-plus'
 import { batchDownloadReports, downloadReport, getAllDict, getTestReportPage, listUserByRole } from '../../api'
 import { formatDateTime, formatTestType } from '../../utils/format'
 
+defineOptions({ name: 'TestReportCenter' })
+
 const list = ref([])
 const total = ref(0)
 const pageNum = ref(1)

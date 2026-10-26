@@ -58,6 +58,7 @@ export const withdrawApplication = (id) => request.post(`/application/withdraw/$
 export const deleteApplication = (id) => request.delete(`/application/${id}`)
 export const getApplicationPage = (params) => request.get('/application/page', { params })
 export const getTodoList = (params) => request.get('/application/todo', { params })
+export const getApprovedList = (params) => request.get('/application/approved', { params })
 export const getApplicationDetail = (id) => request.get(`/application/${id}`)
 export const importWord = (file) => {
   const formData = new FormData()

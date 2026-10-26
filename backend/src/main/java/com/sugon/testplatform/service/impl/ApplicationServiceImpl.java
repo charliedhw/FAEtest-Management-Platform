@@ -528,10 +528,19 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
-    public PageResult<TestApplication> page(int pageNum, int pageSize, String status, String keyword, Long applicantId, boolean todoOnly) {
+    public PageResult<TestApplication> page(int pageNum, int pageSize, String status, String keyword, Long applicantId,
+                                            boolean todoOnly, Boolean assignedOnly) {
         Page<TestApplication> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<TestApplication> qw = new LambdaQueryWrapper<>();
-        if (StringUtils.hasText(status)) qw.eq(TestApplication::getStatus, status);
+        if (StringUtils.hasText(status)) {
+            qw.eq(TestApplication::getStatus, status);
+        } else if (assignedOnly != null) {
+            if (assignedOnly) {
+                qw.eq(TestApplication::getStatus, ST_ASSIGNED);
+            } else {
+                qw.ne(TestApplication::getStatus, ST_ASSIGNED);
+            }
+        }
         if (applicantId != null) qw.eq(TestApplication::getApplicantId, applicantId);
         if (StringUtils.hasText(keyword)) {
             qw.and(w -> w.like(TestApplication::getProjectName, keyword)
@@ -545,6 +554,22 @@ public class ApplicationServiceImpl implements ApplicationService {
             qw.ne(TestApplication::getStatus, ST_DRAFT);
         }
         qw.orderByDesc(TestApplication::getCreateTime);
+        Page<TestApplication> result = applicationMapper.selectPage(page, qw);
+        return new PageResult<>(result.getTotal(), result.getRecords());
+    }
+
+    @Override
+    public PageResult<TestApplication> approvedList(int pageNum, int pageSize, String keyword) {
+        Page<TestApplication> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<TestApplication> qw = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            qw.and(w -> w.like(TestApplication::getProjectName, keyword)
+                    .or().like(TestApplication::getCustomerName, keyword)
+                    .or().like(TestApplication::getAppNo, keyword));
+        }
+        applyAppDataScope(qw);
+        qw.exists("SELECT 1 FROM approval_record ar WHERE ar.app_id = test_application.id AND ar.action = 'APPROVE'");
+        qw.orderByDesc(TestApplication::getUpdateTime);
         Page<TestApplication> result = applicationMapper.selectPage(page, qw);
         return new PageResult<>(result.getTotal(), result.getRecords());
     }
@@ -622,14 +647,17 @@ public class ApplicationServiceImpl implements ApplicationService {
         LambdaQueryWrapper<TestApplication> qw = new LambdaQueryWrapper<>();
 
         // 收集该用户所有角色对应的待办节点
-        List<String> nodes = new java.util.ArrayList<>();
+        java.util.Set<String> nodes = new java.util.LinkedHashSet<>();
         if (roles.contains("PRESALES")) nodes.add(NODE_PRESALES);
-        if (roles.contains("APPROVER")) nodes.add(NODE_APPROVAL);
-        if (roles.contains("LEADER")) nodes.add(NODE_LEADER);
-        if (roles.contains("RESOURCE_ADMIN")) nodes.add(NODE_ASSIGN);
+        if (roles.contains("APPROVER") || roles.contains("ADMIN")) nodes.add(NODE_APPROVAL);
+        if (roles.contains("LEADER") || roles.contains("ADMIN")) nodes.add(NODE_LEADER);
+        if (roles.contains("RESOURCE_ADMIN") || roles.contains("FAE_LEADER") || roles.contains("ADMIN")) {
+            nodes.add(NODE_ASSIGN);
+        }
 
-        // 审批中心待办不显示草稿（草稿只属于申请人）
+        // 待办只保留流转中的申请，已分配/驳回/关闭进入历史视图
         qw.ne(TestApplication::getStatus, ST_DRAFT);
+        qw.notIn(TestApplication::getStatus, ST_ASSIGNED, ST_REJECTED, ST_CLOSED);
         if (!nodes.isEmpty()) {
             qw.in(TestApplication::getCurrentNode, nodes);
         } else {

@@ -1,7 +1,11 @@
 <template>
   <div>
     <el-card shadow="never">
-      <template #header><span>待办审批</span></template>
+      <template #header><span>{{ activeView === 'todo' ? '待办审批' : '已审批' }}</span></template>
+      <el-tabs v-model="activeView" @tab-change="changeView">
+        <el-tab-pane label="待审批" name="todo" />
+        <el-tab-pane label="已审批" name="approved" />
+      </el-tabs>
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="appNo" label="申请单号" width="140" />
         <el-table-column prop="customerName" label="客户名称" min-width="140" show-overflow-tooltip />
@@ -11,8 +15,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="applicantName" label="申请人" width="90" />
-        <el-table-column label="当前节点" width="120">
-          <template #default="{ row }"><el-tag type="warning">{{ nodeMap[row.currentNode] || row.currentNode }}</el-tag></template>
+        <el-table-column :label="activeView === 'approved' ? '当前状态' : '当前节点'" width="130">
+          <template #default="{ row }">
+            <el-tag :type="activeView === 'approved' ? statusType(row.status) : 'warning'">
+              {{ activeView === 'approved' ? (statusMap[row.status] || row.status) : (nodeMap[row.currentNode] || row.currentNode) }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column prop="applyDays" label="申请天数" width="90" />
         <el-table-column label="排期" width="170">
@@ -27,12 +35,14 @@
         <el-table-column label="申请时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column v-if="activeView === 'todo'" label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openApproval(row, 'APPROVE')">通过</el-button>
-            <el-button link type="danger" size="small" @click="openApproval(row, 'REJECT')">驳回</el-button>
+            <template v-if="canApproveRow(row)">
+              <el-button link type="primary" size="small" @click="openApproval(row, 'APPROVE')">通过</el-button>
+              <el-button link type="danger" size="small" @click="openApproval(row, 'REJECT')">驳回</el-button>
+            </template>
             <el-button v-if="row.currentNode === 'ASSIGN' && canSchedule" link type="warning" size="small" @click="openSchedule(row)">排期</el-button>
-            <el-button v-if="row.currentNode === 'ASSIGN'" link type="success" size="small" @click="openAssign(row)">分配</el-button>
+            <el-button v-if="row.currentNode === 'ASSIGN' && canAssign" link type="success" size="small" @click="openAssign(row)">分配</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -125,14 +135,17 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getTodoList, approveApplication, assignApplication, scheduleApplication, getAllDict, listUserByRole } from '../../api'
+import { getTodoList, getApprovedList, approveApplication, assignApplication, scheduleApplication, getAllDict, listUserByRole } from '../../api'
 import { useUserStore } from '../../store/user'
 import { formatDateTime, formatTestType } from '../../utils/format'
+
+defineOptions({ name: 'ApprovalCenter' })
 
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
 const query = ref({ pageNum: 1, pageSize: 10 })
+const activeView = ref('todo')
 const dicts = ref({})
 const testers = ref([])
 const detailVisible = ref(false)
@@ -152,16 +165,31 @@ const assignTesterArr = ref([])
 // 排期
 const userStore = useUserStore()
 const canSchedule = computed(() => userStore.hasRole('SCHEDULER') || userStore.hasRole('ADMIN'))
+const canAssign = computed(() => userStore.hasRole('FAE_LEADER') || userStore.hasRole('RESOURCE_ADMIN') || userStore.hasRole('ADMIN'))
 const scheduleVisible = ref(false)
 const scheduleRange = ref([])
 const scheduleForm = ref({ appId: null, scheduleStartTime: '', scheduleEndTime: '', scheduleRemark: '' })
 
 const nodeMap = { PRESALES_EVAL: '售前评估', APPROVAL: '测试审批组审批', LEADER_APPROVAL: '领导审批', ASSIGN: 'daihw分配任务' }
+const statusMap = {
+  DRAFT: '草稿', PENDING_PRESALES: '待售前评估', PENDING_APPROVAL: '待审批',
+  PENDING_LEADER: '待领导审批', PENDING_ASSIGN: '待分配资源', ASSIGNED: '已分配',
+  REJECTED: '已驳回', CLOSED: '已关闭'
+}
+const statusType = (s) => ({ DRAFT: 'info', PENDING_PRESALES: 'warning', PENDING_APPROVAL: 'warning', PENDING_LEADER: 'warning', PENDING_ASSIGN: 'warning', ASSIGNED: 'success', REJECTED: 'danger', CLOSED: 'info' }[s] || '')
+const canApproveRow = (row) => activeView.value === 'todo' && ['APPROVAL', 'LEADER_APPROVAL'].includes(row.currentNode)
+
+const changeView = () => {
+  query.value.pageNum = 1
+  load()
+}
 
 const load = async () => {
   loading.value = true
   try {
-    const res = await getTodoList(query.value)
+    const res = activeView.value === 'approved'
+      ? await getApprovedList(query.value)
+      : await getTodoList(query.value)
     list.value = res.data.records
     total.value = res.data.total
   } finally {

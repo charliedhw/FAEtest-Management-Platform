@@ -76,6 +76,8 @@ import { Search } from '@element-plus/icons-vue'
 import { getProgressSummary, getProjectDaily } from '../../api'
 import { formatDate } from '../../utils/format'
 
+defineOptions({ name: 'DailySummary' })
+
 const list = ref([])
 const loading = ref(false)
 const total = ref(0)

@@ -56,7 +56,7 @@
       </el-header>
       <el-main class="main">
         <router-view v-slot="{ Component }">
-          <keep-alive :include="['ProjectList']">
+          <keep-alive :include="['ProjectList', 'ApplicationList', 'ApprovalCenter', 'TestReportCenter', 'DailySummary', 'WeeklyReport']">
             <component :is="Component" />
           </keep-alive>
         </router-view>

@@ -28,10 +28,10 @@ import java.util.Map;
 import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -58,12 +58,8 @@ class ReportServiceImplTest {
     }
 
     @Test
-    void reportPageCombinesFiltersAndProjectDataScope() {
-        doAnswer(invocation -> {
-            LambdaQueryWrapper<TestProject> query = invocation.getArgument(0);
-            query.eq(TestProject::getCreateBy, 99L);
-            return null;
-        }).when(projectService).applyDataScope(ArgumentMatchers.<LambdaQueryWrapper<TestProject>>any());
+    void testerReportPageCombinesFiltersWithoutProjectScope() {
+        setRoles("TESTER");
         TestReport report = new TestReport();
         report.setId(11L);
         report.setProjectId(1L);
@@ -84,9 +80,9 @@ class ReportServiceImplTest {
             assertTrue(sql.contains("test_type"));
             assertTrue(sql.contains("device_type"));
             assertTrue(sql.contains("project_name"));
-            assertTrue(sql.contains("create_by"));
+            assertFalse(sql.contains("create_by"));
             assertTrue(query.getParamNameValuePairs().values().containsAll(
-                    List.of("7", "AI", "BW1000", "%客户%", 99L)));
+                    List.of("7", "AI", "BW1000", "%客户%")));
             Page<TestReport> page = invocation.getArgument(0);
             page.setTotal(1);
             page.setRecords(List.of(report));
@@ -115,7 +111,7 @@ class ReportServiceImplTest {
         assertEquals("性能验证", view.getProjectName());
         assertEquals("AI、CPU", view.getTestType());
         assertEquals("COMPLETED", view.getProjectStatus());
-        verify(projectService).applyDataScope(ArgumentMatchers.<LambdaQueryWrapper<TestProject>>any());
+        verify(projectService, never()).applyDataScope(ArgumentMatchers.<LambdaQueryWrapper<TestProject>>any());
     }
 
     @Test
@@ -149,18 +145,31 @@ class ReportServiceImplTest {
     }
 
     @Test
-    void batchDownloadRejectsInvisibleProjectBeforeReadingFiles() {
+    void batchDownloadTesterDoesNotCheckProjectScope() {
         setRoles("TESTER");
         TestReport report = new TestReport();
         report.setId(11L);
         report.setProjectId(1L);
         report.setFileKey("private-key");
         when(reportMapper.selectBatchIds(any())).thenReturn(List.of(report));
-        when(projectService.canView(1L)).thenReturn(false);
+        when(projectMapper.selectBatchIds(any())).thenReturn(List.of());
         BizException error = assertThrows(BizException.class,
                 () -> service.batchDownload(List.of(11L), mock(HttpServletResponse.class)));
-        assertTrue(error.getMessage().contains("无权下载"));
-        verify(projectMapper, never()).selectBatchIds(any());
+        assertTrue(error.getMessage().contains("文件存储服务不可用"));
+        verify(projectService, never()).canView(any());
+    }
+
+    @Test
+    void singleDownloadTesterDoesNotCheckProjectScope() {
+        setRoles("TESTER");
+        TestReport report = new TestReport();
+        report.setId(11L);
+        report.setProjectId(1L);
+        report.setFileKey("private-key");
+        when(reportMapper.selectById(11L)).thenReturn(report);
+        BizException error = assertThrows(BizException.class, () -> service.download(11L));
+        assertTrue(error.getMessage().contains("文件存储服务不可用"));
+        verify(projectService, never()).canView(any());
     }
 
     @Test

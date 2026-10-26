@@ -1,11 +1,15 @@
 <template>
   <div>
     <el-card shadow="never">
+      <el-tabs v-model="activeView" @tab-change="changeView">
+        <el-tab-pane label="申请记录" name="active" />
+        <el-tab-pane label="已分配" name="assigned" />
+      </el-tabs>
       <div class="toolbar">
         <div>
           <el-input v-model="query.keyword" placeholder="项目名/客户/单号" style="width:240px" clearable @clear="load" @keyup.enter="load" />
-          <el-select v-model="query.status" placeholder="状态" clearable style="width:140px;margin-left:8px">
-            <el-option v-for="(v,k) in statusMap" :key="k" :label="v" :value="k" />
+          <el-select v-if="activeView === 'active'" v-model="query.status" placeholder="状态" clearable style="width:140px;margin-left:8px">
+            <el-option v-for="entry in statusEntries" :key="entry[0]" :label="entry[1]" :value="entry[0]" />
           </el-select>
           <el-button type="primary" style="margin-left:8px" @click="load">查询</el-button>
         </div>
@@ -72,12 +76,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApplicationPage, withdrawApplication, deleteApplication, listAttachments, downloadAttachment } from '../../api'
 import { formatDateTime, formatTestType } from '../../utils/format'
 import { useUserStore } from '../../store/user'
+
+defineOptions({ name: 'ApplicationList' })
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -94,7 +100,8 @@ const handleDownloadAttachment = async (att) => {
   a.href = url; a.download = att.fileName; a.click()
   URL.revokeObjectURL(url)
 }
-const query = ref({ pageNum: 1, pageSize: 10, status: '', keyword: '' })
+const query = ref({ pageNum: 1, pageSize: 10, status: '', keyword: '', assignedOnly: false })
+const activeView = ref('active')
 
 const statusMap = {
   DRAFT: '草稿', PENDING_PRESALES: '待售前评估', PENDING_APPROVAL: '待审批',
@@ -102,6 +109,14 @@ const statusMap = {
   REJECTED: '已驳回', CLOSED: '已关闭'
 }
 const statusType = (s) => ({ DRAFT: 'info', PENDING_PRESALES: 'warning', PENDING_APPROVAL: 'warning', PENDING_LEADER: 'warning', PENDING_ASSIGN: 'warning', ASSIGNED: 'success', REJECTED: 'danger', CLOSED: 'info' }[s] || '')
+const statusEntries = computed(() => Object.entries(statusMap).filter(([status]) => status !== 'ASSIGNED'))
+
+const changeView = () => {
+  query.value.pageNum = 1
+  query.value.status = ''
+  query.value.assignedOnly = activeView.value === 'assigned'
+  load()
+}
 
 const load = async () => {
   loading.value = true

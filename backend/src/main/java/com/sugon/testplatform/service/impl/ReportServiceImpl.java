@@ -81,8 +81,12 @@ public class ReportServiceImpl implements ReportService {
         return minioClient;
     }
 
+    private boolean canSeeAllReports() {
+        return UserContext.hasAnyRole("APPROVER", "LEADER", "TESTER", "ADMIN");
+    }
+
     private void checkReportCenterAccess() {
-        if (!UserContext.hasAnyRole("APPROVER", "LEADER", "TESTER", "ADMIN")) {
+        if (!canSeeAllReports()) {
             throw new BizException("仅售前审批组、分管领导和FAE测试工程师可查看测试报告模块");
         }
     }
@@ -96,7 +100,10 @@ public class ReportServiceImpl implements ReportService {
 
         LambdaQueryWrapper<TestProject> projectQuery = buildProjectQuery(params);
         projectQuery.apply("test_project.id = test_report.project_id");
-        projectService.applyDataScope(projectQuery);
+        // 报告中心授权角色（含FAE测试工程师）均可查看全部测试报告
+        if (!canSeeAllReports()) {
+            projectService.applyDataScope(projectQuery);
+        }
 
         LambdaQueryWrapper<TestReport> reportQuery = new LambdaQueryWrapper<>();
         reportQuery.exists("SELECT 1 FROM test_project WHERE " + projectQuery.getSqlSegment());
@@ -133,9 +140,11 @@ public class ReportServiceImpl implements ReportService {
             throw new BizException("部分报告不存在或已被删除，请刷新后重试");
         }
         List<Long> projectIds = reports.stream().map(TestReport::getProjectId).distinct().toList();
-        for (Long projectId : projectIds) {
-            if (!projectService.canView(projectId)) {
-                throw new BizException("所选报告中包含无权下载的项目报告");
+        if (!canSeeAllReports()) {
+            for (Long projectId : projectIds) {
+                if (!projectService.canView(projectId)) {
+                    throw new BizException("所选报告中包含无权下载的项目报告");
+                }
             }
         }
         Map<Long, TestProject> projects = projectMapper.selectBatchIds(projectIds).stream()
@@ -317,7 +326,7 @@ public class ReportServiceImpl implements ReportService {
     public byte[] download(Long id) {
         TestReport report = reportMapper.selectById(id);
         if (report == null) throw new BizException("报告不存在");
-        if (!projectService.canView(report.getProjectId())) {
+        if (!canSeeAllReports() && !projectService.canView(report.getProjectId())) {
             throw new BizException("无权下载该报告");
         }
         try (InputStream in = requireClient().getObject(GetObjectArgs.builder()

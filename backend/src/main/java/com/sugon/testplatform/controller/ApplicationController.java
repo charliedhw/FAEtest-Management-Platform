@@ -72,14 +72,22 @@ public class ApplicationController {
                                                     @RequestParam(defaultValue = "10") int pageSize,
                                                     @RequestParam(required = false) String status,
                                                     @RequestParam(required = false) String keyword,
-                                                    @RequestParam(required = false) Long applicantId) {
-        return Result.ok(applicationService.page(pageNum, pageSize, status, keyword, applicantId, false));
+                                                    @RequestParam(required = false) Long applicantId,
+                                                    @RequestParam(required = false) Boolean assignedOnly) {
+        return Result.ok(applicationService.page(pageNum, pageSize, status, keyword, applicantId, false, assignedOnly));
     }
 
     @GetMapping("/todo")
     public Result<PageResult<TestApplication>> todo(@RequestParam(defaultValue = "1") int pageNum,
                                                     @RequestParam(defaultValue = "10") int pageSize) {
         return Result.ok(applicationService.todoList(UserContext.getUserId(), pageNum, pageSize));
+    }
+
+    @GetMapping("/approved")
+    public Result<PageResult<TestApplication>> approved(@RequestParam(defaultValue = "1") int pageNum,
+                                                        @RequestParam(defaultValue = "10") int pageSize,
+                                                        @RequestParam(required = false) String keyword) {
+        return Result.ok(applicationService.approvedList(pageNum, pageSize, keyword));
     }
 
     @GetMapping("/{id}")
