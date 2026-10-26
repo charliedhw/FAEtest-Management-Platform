@@ -2,6 +2,7 @@ package com.sugon.testplatform.controller;
 
 import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.common.Result;
+import com.sugon.testplatform.dto.PasswordResetRequest;
 import com.sugon.testplatform.dto.UserSaveRequest;
 import com.sugon.testplatform.entity.SysUser;
 import com.sugon.testplatform.security.UserContext;
@@ -40,8 +41,9 @@ public class UserController {
     }
 
     @PostMapping("/resetPassword/{userId}")
-    public Result<Void> resetPassword(@PathVariable Long userId) {
-        userService.resetPassword(userId);
+    public Result<Void> resetPassword(@PathVariable Long userId,
+                                      @RequestBody(required = false) PasswordResetRequest request) {
+        userService.resetPassword(userId, request == null ? null : request.getNewPassword());
         return Result.ok();
     }
 
@@ -60,11 +62,11 @@ public class UserController {
     }
 
     /**
-     * 批量重置密码为默认密码
+     * 批量重置为指定密码，未提供密码时使用默认密码
      */
     @PostMapping("/batchResetPassword")
-    public Result<Integer> batchResetPassword(@RequestBody List<Long> userIds) {
-        return Result.ok(userService.batchResetPassword(userIds));
+    public Result<Integer> batchResetPassword(@RequestBody PasswordResetRequest request) {
+        return Result.ok(userService.batchResetPassword(request.getUserIds(), request.getNewPassword()));
     }
 
     /**

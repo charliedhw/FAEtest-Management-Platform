@@ -10,7 +10,7 @@
         <template v-if="selectedUsers.length > 0">
           <el-divider direction="vertical" />
           <span style="font-size:13px;color:#606266">已选 {{ selectedUsers.length }} 人</span>
-          <el-button type="warning" size="small" @click="handleBatchReset">批量重置密码</el-button>
+          <el-button type="warning" size="small" @click="handleBatchReset">批量修改密码</el-button>
           <el-button type="primary" size="small" @click="openGroupSelect">加入分组</el-button>
           <el-button type="danger" size="small" @click="handleBatchDelete">批量删除</el-button>
         </template>
@@ -61,6 +61,29 @@
       <template #footer>
         <el-button @click="formVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 单个/批量自定义密码重置 -->
+    <el-dialog v-model="resetVisible" :title="resetMode === 'batch' ? '批量修改密码' : '重置密码'" width="480px" :close-on-click-modal="false">
+      <el-alert
+        :title="resetMode === 'batch' ? `将为选中的 ${resetTargetIds.length} 个用户设置相同的新密码` : `正在重置【${resetTargetName}】的密码`"
+        type="warning"
+        :closable="false"
+        style="margin-bottom:16px"
+      />
+      <el-form label-width="90px" @submit.prevent>
+        <el-form-item label="新密码" required>
+          <el-input v-model="resetForm.newPassword" type="password" show-password autocomplete="new-password" placeholder="至少8个字符" />
+        </el-form-item>
+        <el-form-item label="确认密码" required>
+          <el-input v-model="resetForm.confirmPassword" type="password" show-password autocomplete="new-password" placeholder="请再次输入新密码" @keyup.enter="handleConfirmReset" />
+        </el-form-item>
+      </el-form>
+      <div class="password-tip">默认为 Sugon@123，可直接修改；UTF-8 编码后不超过 72 字节。</div>
+      <template #footer>
+        <el-button @click="resetVisible = false">取消</el-button>
+        <el-button type="primary" :loading="resetting" @click="handleConfirmReset">确认重置</el-button>
       </template>
     </el-dialog>
 
@@ -119,6 +142,13 @@ const groupSelectVisible = ref(false)
 const groupList = ref([])
 const targetGroupId = ref(null)
 const groupSaving = ref(false)
+// 单个/批量密码重置
+const resetVisible = ref(false)
+const resetting = ref(false)
+const resetMode = ref('single')
+const resetTargetIds = ref([])
+const resetTargetName = ref('')
+const resetForm = ref({ newPassword: 'Sugon@123', confirmPassword: 'Sugon@123' })
 
 const load = async () => {
   loading.value = true
@@ -148,9 +178,41 @@ const openForm = async (row) => {
   formVisible.value = true
 }
 const handleSave = async () => { await saveUser(form.value); ElMessage.success('保存成功'); formVisible.value = false; load() }
-const handleReset = async (row) => {
-  await ElMessageBox.confirm(`确认重置【${row.realName}】的密码为默认密码？`, '提示', { type: 'warning' })
-  await resetPassword(row.id); ElMessage.success('密码已重置为 Sugon@123')
+const openResetDialog = (mode, users) => {
+  resetMode.value = mode
+  resetTargetIds.value = users.map(u => u.id)
+  resetTargetName.value = mode === 'single' ? users[0].realName : ''
+  resetForm.value = { newPassword: 'Sugon@123', confirmPassword: 'Sugon@123' }
+  resetVisible.value = true
+}
+const handleReset = (row) => openResetDialog('single', [row])
+const handleConfirmReset = async () => {
+  const password = resetForm.value.newPassword
+  if (!password || password.length < 8) {
+    ElMessage.warning('自定义密码不能少于8个字符')
+    return
+  }
+  if (new TextEncoder().encode(password).length > 72) {
+    ElMessage.warning('密码过长，UTF-8编码后不能超过72字节')
+    return
+  }
+  if (password !== resetForm.value.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+  resetting.value = true
+  try {
+    if (resetMode.value === 'single') {
+      await resetPassword(resetTargetIds.value[0], password)
+      ElMessage.success('密码已重置')
+    } else {
+      const res = await batchResetPassword(resetTargetIds.value, password)
+      ElMessage.success(`已重置 ${res.data} 个用户密码`)
+    }
+    resetVisible.value = false
+  } finally {
+    resetting.value = false
+  }
 }
 const handleDelete = async (row) => {
   await ElMessageBox.confirm(`确认删除用户【${row.realName}(${row.username})】？此操作不可恢复`, '警告', { type: 'error', confirmButtonText: '删除', cancelButtonText: '取消' })
@@ -168,13 +230,13 @@ const handleBatchDelete = async () => {
   load()
 }
 
-// 批量重置密码
-const handleBatchReset = async () => {
-  await ElMessageBox.confirm(
-    `确认将选中的 ${selectedUsers.value.length} 个用户密码重置为默认密码 Sugon@123 ？`,
-    '提示', { type: 'warning' })
-  const res = await batchResetPassword(selectedUsers.value.map(u => u.id))
-  ElMessage.success(`已重置 ${res.data} 个用户密码为 Sugon@123`)
+// 批量修改密码
+const handleBatchReset = () => {
+  if (selectedUsers.value.length === 0) {
+    ElMessage.warning('请先选择用户')
+    return
+  }
+  openResetDialog('batch', selectedUsers.value)
 }
 
 // 加入分组
@@ -220,4 +282,5 @@ onMounted(() => { load(); loadRoles(); loadGroups() })
 
 <style scoped>
 .toolbar { display: flex; margin-bottom: 16px; align-items: center; gap: 8px; }
+.password-tip { color: #909399; font-size: 12px; margin: -4px 0 0 90px; }
 </style>

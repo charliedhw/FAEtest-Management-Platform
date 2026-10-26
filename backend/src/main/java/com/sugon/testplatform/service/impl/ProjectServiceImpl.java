@@ -279,11 +279,27 @@ public class ProjectServiceImpl implements ProjectService {
      * 校验当前用户是否有开始测试/改状态权限
      */
     public void checkStartTestPermission(Long id) {
+        requireStatusOperationProject(id);
+    }
+
+    private TestProject requireStatusOperationProject(Long id) {
         TestProject project = projectMapper.selectById(id);
         if (project == null) throw new BizException("项目不存在");
         java.util.Map<String, Boolean> perm = calcPermissions(project);
         if (!perm.get("startTest")) {
             throw new BizException("只有管理员或被分配的FAE测试人员才能操作测试状态");
+        }
+        return project;
+    }
+
+    private void checkCompletionRequirements(Long projectId, String testConclusion) {
+        if (!StringUtils.hasText(testConclusion)) {
+            throw new BizException("完成测试项目前必须填写测试结论");
+        }
+        Long reportCount = reportMapper.selectCount(new LambdaQueryWrapper<TestReport>()
+                .eq(TestReport::getProjectId, projectId));
+        if (reportCount == null || reportCount == 0) {
+            throw new BizException("完成测试项目前必须上传至少一份测试报告");
         }
     }
 
@@ -352,12 +368,18 @@ public class ProjectServiceImpl implements ProjectService {
         if (!canEditProgress(project.getId())) {
             throw new BizException("只有管理员或被分配的测试人员才能编辑项目");
         }
+        TestProject old = projectMapper.selectById(project.getId());
+        if (old == null) throw new BizException("项目不存在");
+        // 通用编辑接口也允许携带状态，完成项目时不能绕过结论和报告校验
+        if ("COMPLETED".equals(project.getStatus()) && !"COMPLETED".equals(old.getStatus())) {
+            String conclusion = project.getTestConclusion() == null
+                    ? old.getTestConclusion() : project.getTestConclusion();
+            checkCompletionRequirements(project.getId(), conclusion);
+        }
         // 如果变更了"是否重点"字段,校验权限(管理员+测试审批组)
-        if (project.getIsKeyProject() != null) {
-            TestProject old = projectMapper.selectById(project.getId());
-            if (old != null && !project.getIsKeyProject().equals(old.getIsKeyProject())) {
-                checkSetKeyPermission();
-            }
+        if (project.getIsKeyProject() != null
+                && !project.getIsKeyProject().equals(old.getIsKeyProject())) {
+            checkSetKeyPermission();
         }
         // 测试人员以 testerIds 为准：变更时按id解析姓名同步 testerNames，保证与FAE组人员关联
         if (StringUtils.hasText(project.getTesterIds())) {
@@ -378,7 +400,10 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public void updateStatus(Long id, String status) {
         // 开始/暂停/恢复/完成 等状态操作需要权限
-        checkStartTestPermission(id);
+        TestProject current = requireStatusOperationProject(id);
+        if ("COMPLETED".equals(status)) {
+            checkCompletionRequirements(id, current.getTestConclusion());
+        }
         TestProject p = new TestProject();
         p.setId(id);
         p.setStatus(status);

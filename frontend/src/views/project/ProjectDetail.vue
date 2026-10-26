@@ -378,6 +378,16 @@ const load = async () => {
 }
 
 const changeStatus = async (status) => {
+  if (status === 'COMPLETED') {
+    if (!String(project.value.testConclusion || '').trim()) {
+      ElMessage.warning('完成测试项目前请先在“编辑信息”中填写测试结论')
+      return
+    }
+    if (reportList.value.length === 0) {
+      ElMessage.warning('完成测试项目前请先上传至少一份测试报告')
+      return
+    }
+  }
   await updateProjectStatus({ id: projectId, status })
   ElMessage.success('状态已更新')
   load()

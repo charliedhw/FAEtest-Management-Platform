@@ -14,6 +14,7 @@ const routes = [
       { path: 'approval', name: 'Approval', component: () => import('../views/application/ApprovalCenter.vue'), meta: { title: '审批中心' } },
       { path: 'project', name: 'Project', component: () => import('../views/project/ProjectList.vue'), meta: { title: '项目清单' } },
       { path: 'project/:id', name: 'ProjectDetail', component: () => import('../views/project/ProjectDetail.vue'), meta: { title: '项目详情' } },
+      { path: 'report/center', name: 'TestReportCenter', component: () => import('../views/report/TestReportCenter.vue'), meta: { title: '测试报告' } },
       { path: 'report/daily', name: 'DailySummary', component: () => import('../views/report/DailySummary.vue'), meta: { title: '日报汇总' } },
       { path: 'report/weekly', name: 'WeeklyReport', component: () => import('../views/report/WeeklyReport.vue'), meta: { title: '周报' } },
       { path: 'resource', name: 'Resource', component: () => import('../views/resource/ResourceList.vue'), meta: { title: '资源管理' } },
@@ -54,6 +55,14 @@ router.beforeEach((to, from, next) => {
     const allowed = ['APPROVER', 'FAE_LEADER', 'RESOURCE_ADMIN', 'ADMIN']
     const hasPerm = roles.some(r => allowed.includes(r))
     if (!hasPerm) {
+      next('/dashboard')
+      return
+    }
+  }
+  // 测试报告：售前审批组/分管领导/FAE测试工程师/管理员可见
+  if (to.path === '/report/center') {
+    const allowed = ['APPROVER', 'LEADER', 'TESTER', 'ADMIN']
+    if (!roles.some(r => allowed.includes(r))) {
       next('/dashboard')
       return
     }

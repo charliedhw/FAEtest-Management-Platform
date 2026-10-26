@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -191,13 +192,25 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void resetPassword(Long userId) {
+    public void resetPassword(Long userId, String newPassword) {
         UserContext.requireRole("ADMIN");
         SysUser user = userMapper.selectById(userId);
         if (user == null) throw new BizException("用户不存在");
-        user.setPassword(passwordEncoder.encode(DEFAULT_PWD));
+        String password = resolveResetPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(password));
         user.setIsFirstLogin(1);
         userMapper.updateById(user);
+    }
+
+    private String resolveResetPassword(String requestedPassword) {
+        if (requestedPassword == null) return DEFAULT_PWD;
+        if (!StringUtils.hasText(requestedPassword) || requestedPassword.length() < 8) {
+            throw new BizException("自定义密码不能少于8个字符");
+        }
+        if (requestedPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new BizException("密码过长，UTF-8编码后不能超过72字节");
+        }
+        return requestedPassword;
     }
 
     @Override
@@ -221,10 +234,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public int batchResetPassword(List<Long> userIds) {
+    public int batchResetPassword(List<Long> userIds, String newPassword) {
         UserContext.requireRole("ADMIN");
         if (userIds == null || userIds.isEmpty()) return 0;
-        String encoded = passwordEncoder.encode(DEFAULT_PWD);
+        String password = resolveResetPassword(newPassword);
+        String encoded = passwordEncoder.encode(password);
         int count = 0;
         for (Long userId : userIds) {
             SysUser user = userMapper.selectById(userId);

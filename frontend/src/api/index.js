@@ -7,13 +7,13 @@ export const login = (data) => request.post('/auth/login', data)
 export const getUserPage = (params) => request.get('/user/page', { params })
 export const saveUser = (data) => request.post('/user/save', data)
 export const changePassword = (data) => request.post('/user/changePassword', data)
-export const resetPassword = (userId) => request.post(`/user/resetPassword/${userId}`)
+export const resetPassword = (userId, newPassword) => request.post(`/user/resetPassword/${userId}`, { newPassword })
 export const listUserByRole = (roleCode) => request.get('/user/listByRole', { params: { roleCode } })
 export const listAllUser = () => request.get('/user/listAll')
 export const getUserInfo = () => request.get('/user/info')
 export const deleteUser = (userId) => request.delete(`/user/${userId}`)
 export const batchDeleteUsers = (userIds) => request.post('/user/batchDelete', userIds)
-export const batchResetPassword = (userIds) => request.post('/user/batchResetPassword', userIds)
+export const batchResetPassword = (userIds, newPassword) => request.post('/user/batchResetPassword', { userIds, newPassword })
 export const importUsers = (file) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -93,6 +93,7 @@ export const getCurrentWeek = () => request.get('/weeklyReport/currentWeek')
 export const getWeeklyPersonSummary = (params) => request.get('/weeklyReport/personSummary', { params })
 // 报告下载（blob，token走拦截器）
 export const downloadReport = (id) => request.get(`/report/download/${id}`, { responseType: 'blob' })
+export const batchDownloadReports = (ids) => request.post('/report/batchDownload', ids, { responseType: 'blob', timeout: 300000 })
 // 项目清单导出（blob，token走拦截器）
 export const exportProjects = (params) => request.get('/project/export', { params, responseType: 'blob' })
 
@@ -129,6 +130,7 @@ export const uploadReport = (projectId, file) => {
   return request.post('/report/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 export const listReport = (projectId) => request.get(`/report/list/${projectId}`)
+export const getTestReportPage = (params) => request.get('/report/page', { params })
 export const deleteReport = (id) => request.delete(`/report/${id}`)
 
 // 通知

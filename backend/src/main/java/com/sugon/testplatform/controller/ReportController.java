@@ -1,8 +1,11 @@
 package com.sugon.testplatform.controller;
 
+import com.sugon.testplatform.common.PageResult;
 import com.sugon.testplatform.common.Result;
+import com.sugon.testplatform.dto.TestReportView;
 import com.sugon.testplatform.entity.TestReport;
 import com.sugon.testplatform.service.ReportService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -12,13 +15,35 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/report")
 @RequiredArgsConstructor
 public class ReportController {
     private final ReportService reportService;
+
+    @GetMapping("/page")
+    public Result<PageResult<TestReportView>> page(@RequestParam(defaultValue = "1") int pageNum,
+                                                   @RequestParam(defaultValue = "10") int pageSize,
+                                                   @RequestParam(required = false) Long testerId,
+                                                   @RequestParam(required = false) String testType,
+                                                   @RequestParam(required = false) String deviceType,
+                                                   @RequestParam(required = false) String keyword) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("testerId", testerId);
+        params.put("testType", testType);
+        params.put("deviceType", deviceType);
+        params.put("keyword", keyword);
+        return Result.ok(reportService.page(pageNum, pageSize, params));
+    }
+
+    @PostMapping("/batchDownload")
+    public void batchDownload(@RequestBody List<Long> ids, HttpServletResponse response) {
+        reportService.batchDownload(ids, response);
+    }
 
     @PostMapping("/upload")
     public Result<TestReport> upload(@RequestParam Long projectId, @RequestParam MultipartFile file) {

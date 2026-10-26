@@ -11,6 +11,7 @@
         <el-menu-item index="/approval"><el-icon><Stamp /></el-icon><template #title>审批中心</template></el-menu-item>
         <el-menu-item index="/project"><el-icon><FolderOpened /></el-icon><template #title>项目清单</template></el-menu-item>
         <el-menu-item index="/asset"><el-icon><OfficeBuilding /></el-icon><template #title>资产中心</template></el-menu-item>
+        <el-menu-item v-if="canSeeTestReport" index="/report/center"><el-icon><Document /></el-icon><template #title>测试报告</template></el-menu-item>
         <el-menu-item v-if="canSeeDailySummary" index="/report/daily"><el-icon><DataLine /></el-icon><template #title>日报</template></el-menu-item>
         <el-menu-item v-if="canSeeWeeklyReport" index="/report/weekly"><el-icon><Notebook /></el-icon><template #title>周报</template></el-menu-item>
         <el-sub-menu index="resource" v-if="canSeeResource">
@@ -172,6 +173,12 @@ const handleBatchDelete = async () => {
 const canSeeResource = computed(() =>
   userStore.hasRole('APPROVER') || userStore.hasRole('FAE_LEADER')
   || userStore.hasRole('RESOURCE_ADMIN') || userStore.hasRole('ADMIN')
+)
+
+// 测试报告: 售前审批组(APPROVER)、分管领导(LEADER)、FAE测试工程师(TESTER)、管理员可见
+const canSeeTestReport = computed(() =>
+  userStore.hasRole('APPROVER') || userStore.hasRole('LEADER')
+  || userStore.hasRole('TESTER') || userStore.hasRole('ADMIN')
 )
 
 // 日报汇总: 审批组(APPROVER)、FAE负责人(FAE_LEADER)、管理员(ADMIN)可见

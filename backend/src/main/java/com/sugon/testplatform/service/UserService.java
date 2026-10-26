@@ -19,11 +19,11 @@ public interface UserService {
     void deleteUser(Long userId);
     // 批量删除用户，返回删除数量（跳过admin和当前登录人）
     int batchDelete(List<Long> userIds);
-    // 批量重置密码为默认密码，返回重置数量
-    int batchResetPassword(List<Long> userIds);
+    // 批量重置为指定密码，未提供密码时使用默认密码，返回重置数量
+    int batchResetPassword(List<Long> userIds, String newPassword);
     java.util.Map<String, Object> importUsers(org.springframework.web.multipart.MultipartFile file);
     void changePassword(Long userId, String oldPwd, String newPwd);
-    void resetPassword(Long userId);
+    void resetPassword(Long userId, String newPassword);
     List<SysUser> listByRole(String roleCode);
     List<SysUser> listAll();
     List<Long> getUserRoleIds(Long userId);
